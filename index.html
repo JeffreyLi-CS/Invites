@@ -1,13 +1,48 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Invites MVP</title>
-  <link rel="stylesheet" href="./styles.css" />
+  <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
-  <h1>Invites MVP</h1>
-  <p>If you can see this, GitHub Pages is working.</p>
+  <div class="container">
+    <header id="header">
+      <!-- Event title, description, and locked plan card rendered here -->
+    </header>
+
+    <section id="voting-section" class="section">
+      <!-- Voting form rendered here when not locked -->
+    </section>
+
+    <section id="results-section" class="section">
+      <h2>Live Results</h2>
+      <div id="results-content">
+        <!-- Tallies rendered here -->
+      </div>
+    </section>
+
+    <section id="rsvp-section" class="section">
+      <!-- RSVP form rendered here when locked -->
+    </section>
+
+    <section id="organizer-section" class="section organizer">
+      <h3>Organizer Controls</h3>
+      <div class="organizer-controls">
+        <div class="form-group">
+          <input type="password" id="organizer-password" placeholder="Organizer password">
+        </div>
+        <button id="lock-btn" class="btn btn-primary">Lock Plan</button>
+        <button id="reset-btn" class="btn btn-secondary">Reset Demo</button>
+      </div>
+      <p class="organizer-error" id="organizer-error"></p>
+    </section>
+
+    <footer class="demo-tip">
+      <p><strong>Demo tip:</strong> Use multiple names to simulate different voters. Password is "admin".</p>
+    </footer>
+  </div>
 
   <script src="./app.js"></script>
 </body>
