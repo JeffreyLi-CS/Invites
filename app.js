@@ -460,12 +460,17 @@ function renderVotingSection(state) {
     return;
   }
 
+  // Get logged in user name if available
+  const isLoggedIn = currentUser && state.host.users.some(u => u.phoneNumber === currentUser);
+  const currentUserData = isLoggedIn ? state.host.users.find(u => u.phoneNumber === currentUser) : null;
+  const defaultName = currentUserData ? currentUserData.name : '';
+
   let html = `
     <h2>Cast Your Vote</h2>
     <form id="vote-form">
       <div class="form-group">
         <label for="voter-name">Your Name</label>
-        <input type="text" id="voter-name" placeholder="Enter your name" required>
+        <input type="text" id="voter-name" placeholder="Enter your name" value="${escapeHtml(defaultName)}" required>
       </div>
 
       <div class="form-group">
@@ -578,12 +583,17 @@ function renderRSVPSection(state) {
     return;
   }
 
+  // Get logged in user name if available
+  const isLoggedIn = currentUser && state.host.users.some(u => u.phoneNumber === currentUser);
+  const currentUserData = isLoggedIn ? state.host.users.find(u => u.phoneNumber === currentUser) : null;
+  const defaultName = currentUserData ? currentUserData.name : '';
+
   let html = `
     <h2>RSVP</h2>
     <form id="rsvp-form">
       <div class="form-group">
         <label for="rsvp-name">Your Name</label>
-        <input type="text" id="rsvp-name" placeholder="Enter your name" required>
+        <input type="text" id="rsvp-name" placeholder="Enter your name" value="${escapeHtml(defaultName)}" required>
       </div>
 
       <div class="rsvp-controls">
@@ -669,33 +679,20 @@ function renderCalendarTab(state) {
   const timeLabel = state.options.times.find(t => t.id === state.organizer.lockedTimeId)?.label || '';
   const locationLabel = state.options.locations.find(l => l.id === state.organizer.lockedLocationId)?.label || '';
 
-  const startDate = state.event.startAtISO ? new Date(state.event.startAtISO).toLocaleString() : 'Not set';
-  const endDate = state.event.endAtISO ? new Date(state.event.endAtISO).toLocaleString() : 'Not set';
-
   let html = `
     <div class="calendar-summary">
       <h3>${escapeHtml(state.event.title)}</h3>
       <div class="calendar-detail"><strong>Time:</strong> ${escapeHtml(timeLabel)}</div>
       <div class="calendar-detail"><strong>Location:</strong> ${escapeHtml(locationLabel)}</div>
-      <div class="calendar-detail"><strong>Start:</strong> ${startDate}</div>
-      <div class="calendar-detail"><strong>End:</strong> ${endDate}</div>
       <div class="calendar-actions">
-        <button id="download-ics-btn" class="btn btn-primary" ${!state.event.startAtISO ? 'disabled' : ''}>Download .ics</button>
-        <button id="copy-event-btn" class="btn btn-secondary">Copy Event Details</button>
+        <button id="copy-event-btn" class="btn btn-primary">Copy Event Details</button>
       </div>
     </div>
   `;
 
-  if (!state.event.startAtISO) {
-    html += '<p style="color: #718096; font-style: italic; text-align: center;">Host needs to set event date/time in the Host tab before calendar download is available.</p>';
-  }
-
   content.innerHTML = html;
 
   // Attach handlers
-  if (state.event.startAtISO) {
-    document.getElementById('download-ics-btn').addEventListener('click', () => handleDownloadICS(state));
-  }
   document.getElementById('copy-event-btn').addEventListener('click', () => handleCopyEvent(state));
 }
 
@@ -874,28 +871,8 @@ function renderHostTab(state) {
     </div>
   `;
 
-  // Event datetime editing
-  const startValue = state.event.startAtISO ? new Date(state.event.startAtISO).toISOString().slice(0, 16) : '';
-  const endValue = state.event.endAtISO ? new Date(state.event.endAtISO).toISOString().slice(0, 16) : '';
-
+  // Send Text Reminder
   html += `
-    <div class="event-datetime-edit">
-      <h3>Event Date & Time</h3>
-      <form id="datetime-form">
-        <div class="datetime-grid">
-          <div class="form-group">
-            <label for="event-start">Start</label>
-            <input type="datetime-local" id="event-start" value="${startValue}">
-          </div>
-          <div class="form-group">
-            <label for="event-end">End</label>
-            <input type="datetime-local" id="event-end" value="${endValue}">
-          </div>
-        </div>
-        <button type="submit" class="btn btn-primary">Save Date & Time</button>
-      </form>
-    </div>
-
     <div class="reminder-form">
       <h3>Send Text Reminder</h3>
       <p style="color: #4a5568; margin-bottom: 16px;">Send a text message to all ${state.host.users.length} registered user${state.host.users.length !== 1 ? 's' : ''}.</p>
@@ -986,11 +963,6 @@ function renderHostTab(state) {
   const addOptionForm = document.getElementById('add-option-form');
   if (addOptionForm) {
     addOptionForm.addEventListener('submit', handleAddOption);
-  }
-
-  const datetimeForm = document.getElementById('datetime-form');
-  if (datetimeForm) {
-    datetimeForm.addEventListener('submit', handleSaveDatetime);
   }
 
   const reminderForm = document.getElementById('reminder-form');
@@ -1425,10 +1397,8 @@ function handleDownloadICS(state) {
 function handleCopyEvent(state) {
   const timeLabel = state.options.times.find(t => t.id === state.organizer.lockedTimeId)?.label || '';
   const locationLabel = state.options.locations.find(l => l.id === state.organizer.lockedLocationId)?.label || '';
-  const startDate = state.event.startAtISO ? new Date(state.event.startAtISO).toLocaleString() : 'Not set';
-  const endDate = state.event.endAtISO ? new Date(state.event.endAtISO).toLocaleString() : 'Not set';
 
-  const text = `${state.event.title}\n\n${state.event.description}\n\nTime: ${timeLabel}\nLocation: ${locationLabel}\nStart: ${startDate}\nEnd: ${endDate}`;
+  const text = `${state.event.title}\n\n${state.event.description}\n\nTime: ${timeLabel}\nLocation: ${locationLabel}`;
 
   navigator.clipboard.writeText(text).then(() => {
     alert('Event details copied to clipboard!');
