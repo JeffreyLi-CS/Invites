@@ -463,14 +463,27 @@ function renderVotingSection(state) {
   // Get logged in user name if available
   const isLoggedIn = currentUser && state.host.users.some(u => u.phoneNumber === currentUser);
   const currentUserData = isLoggedIn ? state.host.users.find(u => u.phoneNumber === currentUser) : null;
-  const defaultName = currentUserData ? currentUserData.name : '';
+
+  if (!isLoggedIn) {
+    section.innerHTML = `
+      <h2>Cast Your Vote</h2>
+      <div style="text-align: center; padding: 40px 20px; background: linear-gradient(135deg, #fff5f5 0%, #ffe5e5 100%); border-radius: 12px; border: 2px solid #fc8181;">
+        <p style="color: #742a2a; font-size: 16px; font-weight: 500; margin-bottom: 16px;">Please sign up to vote</p>
+        <p style="color: #742a2a; margin-bottom: 20px;">You need to register with your phone number before you can cast your vote.</p>
+        <button class="btn btn-primary" onclick="setActiveTab('signup')">Go to Signup</button>
+      </div>
+    `;
+    return;
+  }
+
+  const defaultName = currentUserData.name;
 
   let html = `
     <h2>Cast Your Vote</h2>
     <form id="vote-form">
       <div class="form-group">
         <label for="voter-name">Your Name</label>
-        <input type="text" id="voter-name" placeholder="Enter your name" value="${escapeHtml(defaultName)}" required>
+        <input type="text" id="voter-name" value="${escapeHtml(defaultName)}" readonly style="background: #e2e8f0; cursor: not-allowed;" required>
       </div>
 
       <div class="form-group">
@@ -586,14 +599,49 @@ function renderRSVPSection(state) {
   // Get logged in user name if available
   const isLoggedIn = currentUser && state.host.users.some(u => u.phoneNumber === currentUser);
   const currentUserData = isLoggedIn ? state.host.users.find(u => u.phoneNumber === currentUser) : null;
-  const defaultName = currentUserData ? currentUserData.name : '';
+
+  if (!isLoggedIn) {
+    let html = `
+      <h2>RSVP</h2>
+      <div style="text-align: center; padding: 40px 20px; background: linear-gradient(135deg, #fff5f5 0%, #ffe5e5 100%); border-radius: 12px; border: 2px solid #fc8181;">
+        <p style="color: #742a2a; font-size: 16px; font-weight: 500; margin-bottom: 16px;">Please sign up to RSVP</p>
+        <p style="color: #742a2a; margin-bottom: 20px;">You need to register with your phone number before you can confirm your attendance.</p>
+        <button class="btn btn-primary" onclick="setActiveTab('signup')">Go to Signup</button>
+      </div>
+
+      <div class="attendee-list">
+        <h4>Attendees</h4>
+    `;
+
+    const going = Object.entries(state.rsvps)
+      .filter(([_, rsvp]) => rsvp.status === 'going')
+      .map(([name, _]) => name);
+
+    html += `<div class="attendee-count">${going.length} going</div>`;
+
+    if (going.length > 0) {
+      html += '<ul>';
+      going.forEach(name => {
+        html += `<li>${escapeHtml(name)}</li>`;
+      });
+      html += '</ul>';
+    } else {
+      html += '<p style="color: #718096; font-style: italic;">No one has confirmed yet</p>';
+    }
+
+    html += '</div>';
+    section.innerHTML = html;
+    return;
+  }
+
+  const defaultName = currentUserData.name;
 
   let html = `
     <h2>RSVP</h2>
     <form id="rsvp-form">
       <div class="form-group">
         <label for="rsvp-name">Your Name</label>
-        <input type="text" id="rsvp-name" placeholder="Enter your name" value="${escapeHtml(defaultName)}" required>
+        <input type="text" id="rsvp-name" value="${escapeHtml(defaultName)}" readonly style="background: #e2e8f0; cursor: not-allowed;" required>
       </div>
 
       <div class="rsvp-controls">
