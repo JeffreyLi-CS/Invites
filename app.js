@@ -769,137 +769,22 @@ function renderHostTab(state) {
 
   const datetimeForm = document.getElementById('datetime-form');
   if (datetimeForm) {
-    // Event datetime editing
-    const startValue = state.event.startAtISO ? new Date(state.event.startAtISO).toISOString().slice(0, 16) : '';
-    const endValue = state.event.endAtISO ? new Date(state.event.endAtISO).toISOString().slice(0, 16) : '';
-
-    html += `
-      <div class="event-datetime-edit">
-        <h3>Event Date & Time</h3>
-        <form id="datetime-form">
-          <div class="datetime-grid">
-            <div class="form-group">
-              <label for="event-start">Start</label>
-              <input type="datetime-local" id="event-start" value="${startValue}">
-            </div>
-            <div class="form-group">
-              <label for="event-end">End</label>
-              <input type="datetime-local" id="event-end" value="${endValue}">
-            </div>
-          </div>
-          <button type="submit" class="btn btn-primary">Save Date & Time</button>
-        </form>
-      </div>
-
-      <div class="reminder-form">
-        <h3>Create Reminder</h3>
-        <form id="reminder-form">
-          <div class="form-group">
-            <label for="reminder-message">Message</label>
-            <textarea id="reminder-message" rows="3" placeholder="Enter reminder message" required style="width: 100%; padding: 14px 16px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 15px; background: #fafbfc; font-family: inherit;"></textarea>
-          </div>
-          <div class="form-group">
-            <label for="reminder-sendAt">Send At (optional - leave blank to send immediately)</label>
-            <input type="datetime-local" id="reminder-sendAt">
-          </div>
-          <button type="submit" class="btn btn-primary">Create Reminder</button>
-          <div id="reminder-message-feedback"></div>
-        </form>
-      </div>
-    `;
+    datetimeForm.addEventListener('submit', handleSaveDatetime);
   }
 
-  // Reminder list (visible to everyone, but full controls only when unlocked)
-  html += '<div class="reminder-list"><h3>Reminders</h3>';
-
-  if (state.host.reminders.length === 0) {
-    html += '<p style="color: #718096; font-style: italic;">No reminders yet</p>';
-  } else {
-    const reminders = hostUnlocked
-      ? state.host.reminders.sort((a, b) => b.createdAt - a.createdAt)
-      : state.host.reminders.filter(r => r.sent).sort((a, b) => b.createdAt - a.createdAt);
-
-    reminders.forEach(reminder => {
-      const isSent = reminder.sent || (!reminder.sendAtISO);
-      const badge = isSent ? 'sent' : 'scheduled';
-      const badgeText = isSent ? 'Sent' : 'Scheduled';
-      const createdDate = new Date(reminder.createdAt);
-      const sendDate = reminder.sendAtISO ? new Date(reminder.sendAtISO) : null;
-
-      html += `
-        <div class="reminder-item ${badge}">
-          <div class="reminder-header">
-            <span class="reminder-badge ${badge}">${badgeText}</span>
-            <span style="font-size: 13px; color: #718096;">${createdDate.toLocaleString()}</span>
-          </div>
-          <div class="reminder-message">${escapeHtml(reminder.message)}</div>
-      `;
-
-      if (sendDate && !isSent) {
-        html += `<div class="reminder-time">Scheduled for: ${sendDate.toLocaleString()}</div>`;
-      }
-
-      if (hostUnlocked) {
-        html += `
-          <div class="reminder-actions">
-        `;
-        if (!isSent) {
-          html += `<button class="btn btn-success" onclick="handleSendNow('${reminder.id}')">Send Now</button>`;
-        }
-        html += `
-            <button class="btn btn-danger" onclick="handleDeleteReminder('${reminder.id}')">Delete</button>
-          </div>
-        `;
-      }
-
-      html += '</div>';
-    });
+  const reminderForm = document.getElementById('reminder-form');
+  if (reminderForm) {
+    reminderForm.addEventListener('submit', handleCreateReminder);
   }
 
-  html += '</div>';
-
-  // Organizer controls (lock/reset)
-  if (hostUnlocked) {
-    html += `
-      <div class="event-datetime-edit" style="margin-top: 20px;">
-        <h3>Organizer Controls</h3>
-        <div class="organizer-controls">
-          <div class="form-group">
-            <input type="password" id="organizer-password" placeholder="Organizer password" value="admin">
-          </div>
-          <button id="lock-btn" class="btn btn-primary" ${state.locked ? 'disabled' : ''}>Lock Plan</button>
-          <button id="reset-btn" class="btn btn-secondary">Reset Demo</button>
-        </div>
-        <p class="organizer-error" id="organizer-error"></p>
-      </div>
-    `;
+  const lockBtn = document.getElementById('lock-btn');
+  if (lockBtn && !state.locked) {
+    lockBtn.addEventListener('click', handleLockPlan);
   }
 
-  content.innerHTML = html;
-
-  // Attach event listeners
-  document.getElementById('host-unlock-btn').addEventListener('click', handleHostUnlock);
-
-  if (hostUnlocked) {
-    const datetimeForm = document.getElementById('datetime-form');
-    if (datetimeForm) {
-      datetimeForm.addEventListener('submit', handleSaveDatetime);
-    }
-
-    const reminderForm = document.getElementById('reminder-form');
-    if (reminderForm) {
-      reminderForm.addEventListener('submit', handleCreateReminder);
-    }
-
-    const lockBtn = document.getElementById('lock-btn');
-    if (lockBtn && !state.locked) {
-      lockBtn.addEventListener('click', handleLockPlan);
-    }
-
-    const resetBtn = document.getElementById('reset-btn');
-    if (resetBtn) {
-      resetBtn.addEventListener('click', handleResetDemo);
-    }
+  const resetBtn = document.getElementById('reset-btn');
+  if (resetBtn) {
+    resetBtn.addEventListener('click', handleResetDemo);
   }
 }
 
