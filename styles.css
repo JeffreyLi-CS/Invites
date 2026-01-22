@@ -18,6 +18,51 @@ body {
   margin: 0 auto;
 }
 
+.tab-nav {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 24px;
+  background: rgba(255, 255, 255, 0.95);
+  padding: 12px;
+  border-radius: 12px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+  overflow-x: auto;
+}
+
+.tab-btn {
+  flex: 1;
+  min-width: 80px;
+  padding: 12px 20px;
+  border: 2px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: #4a5568;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.tab-btn:hover {
+  background: rgba(102, 126, 234, 0.1);
+  color: #667eea;
+}
+
+.tab-btn.active {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+.tab-panel {
+  display: none;
+}
+
+.tab-panel.active {
+  display: block;
+}
+
 .section {
   background: white;
   border-radius: 16px;
@@ -475,6 +520,197 @@ h2, h3 {
   border-radius: 12px;
   backdrop-filter: blur(10px);
   margin-top: 8px;
+}
+
+.host-section {
+  background: linear-gradient(135deg, #faf5ff 0%, #f3e8ff 100%);
+  border: 2px solid #9f7aea;
+}
+
+.host-login {
+  background: rgba(255, 255, 255, 0.6);
+  padding: 20px;
+  border-radius: 10px;
+  margin-bottom: 20px;
+  border: 2px dashed #9f7aea;
+}
+
+.host-controls-locked {
+  text-align: center;
+  color: #718096;
+  font-style: italic;
+  padding: 20px;
+}
+
+.reminder-form {
+  background: white;
+  padding: 20px;
+  border-radius: 10px;
+  margin-bottom: 20px;
+  border: 2px solid #e2e8f0;
+}
+
+.reminder-list {
+  background: white;
+  padding: 20px;
+  border-radius: 10px;
+  border: 2px solid #e2e8f0;
+}
+
+.reminder-item {
+  padding: 16px;
+  background: #f7fafc;
+  border-radius: 8px;
+  margin-bottom: 12px;
+  border-left: 4px solid #9f7aea;
+}
+
+.reminder-item.sent {
+  border-left-color: #48bb78;
+}
+
+.reminder-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.reminder-badge {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.reminder-badge.scheduled {
+  background: #feebc8;
+  color: #7c2d12;
+}
+
+.reminder-badge.sent {
+  background: #c6f6d5;
+  color: #22543d;
+}
+
+.reminder-message {
+  color: #2d3748;
+  margin-bottom: 8px;
+  font-size: 15px;
+}
+
+.reminder-time {
+  font-size: 13px;
+  color: #718096;
+  margin-bottom: 8px;
+}
+
+.reminder-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.reminder-actions .btn {
+  padding: 8px 16px;
+  font-size: 13px;
+}
+
+.calendar-summary {
+  background: linear-gradient(135deg, #e8edff 0%, #f0f4ff 100%);
+  padding: 24px;
+  border-radius: 12px;
+  margin-bottom: 20px;
+  border: 2px solid #667eea;
+}
+
+.calendar-summary h3 {
+  margin-bottom: 16px;
+  color: #667eea;
+}
+
+.calendar-detail {
+  margin-bottom: 12px;
+  color: #2d3748;
+  font-size: 15px;
+}
+
+.calendar-detail strong {
+  color: #1a202c;
+}
+
+.calendar-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.calendar-not-locked {
+  text-align: center;
+  padding: 40px 20px;
+  color: #718096;
+  font-style: italic;
+}
+
+.event-datetime-edit {
+  background: rgba(255, 255, 255, 0.6);
+  padding: 20px;
+  border-radius: 10px;
+  margin-bottom: 20px;
+  border: 2px solid #e2e8f0;
+}
+
+.datetime-grid {
+  display: grid;
+  gap: 16px;
+  margin-top: 12px;
+}
+
+@media (min-width: 640px) {
+  .datetime-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.reminders-display {
+  background: linear-gradient(135deg, #fff5f5 0%, #ffe5e5 100%);
+  padding: 20px;
+  border-radius: 12px;
+  border: 2px solid #fc8181;
+}
+
+.reminders-display h3 {
+  color: #c53030;
+  margin-bottom: 16px;
+}
+
+.reminder-display-item {
+  background: white;
+  padding: 16px;
+  border-radius: 8px;
+  margin-bottom: 12px;
+  box-shadow: 0 2px 6px rgba(252, 129, 129, 0.1);
+}
+
+.reminder-display-time {
+  font-size: 13px;
+  color: #718096;
+  margin-bottom: 4px;
+}
+
+.reminder-display-message {
+  color: #2d3748;
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.last-updated {
+  font-size: 12px;
+  color: #a0aec0;
+  text-align: right;
+  margin-top: 12px;
+  font-style: italic;
 }
 
 @media (max-width: 640px) {
