@@ -12,11 +12,8 @@
       <!-- Event title and description rendered here -->
     </header>
 
-    <nav class="tab-nav">
-      <button class="tab-btn active" data-tab="event">Event</button>
-      <button class="tab-btn" data-tab="results">Results</button>
-      <button class="tab-btn" data-tab="calendar">Calendar</button>
-      <button class="tab-btn" data-tab="host">Host</button>
+    <nav class="tab-nav" id="tab-nav">
+      <!-- Tab buttons rendered dynamically -->
     </nav>
 
     <!-- Event Tab -->
@@ -57,6 +54,15 @@
       </section>
     </div>
 
+    <!-- Signup Tab -->
+    <div id="tab-signup" class="tab-panel">
+      <section class="section">
+        <div id="signup-content">
+          <!-- Signup form rendered here -->
+        </div>
+      </section>
+    </div>
+
     <!-- Host Tab -->
     <div id="tab-host" class="tab-panel">
       <section class="section host-section">
@@ -68,7 +74,7 @@
     </div>
 
     <footer class="demo-tip">
-      <p><strong>Demo tip:</strong> Use multiple names to simulate different voters. Sign up with any phone number in Host tab to send text reminders. Password is "admin" for locking the plan.</p>
+      <p><strong>Demo tip:</strong> Sign up in Signup tab to become a host. Suggest times/locations in Event tab. Hosts can approve suggestions and lock the plan (password: "admin").</p>
     </footer>
   </div>
 

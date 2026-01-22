@@ -28,16 +28,12 @@ function seedState() {
       reminders: []
     },
     options: {
-      times: [
-        { id: 't1', label: 'Fri 7:00 PM' },
-        { id: 't2', label: 'Sat 1:00 PM' },
-        { id: 't3', label: 'Sun 11:00 AM' }
-      ],
-      locations: [
-        { id: 'l1', label: 'Ramen Tatsu-Ya' },
-        { id: 'l2', label: 'Home Poker Night' },
-        { id: 'l3', label: 'Zilker Picnic' }
-      ]
+      times: [],
+      locations: []
+    },
+    suggestions: {
+      times: [],
+      locations: []
     },
     votes: {},
     rsvps: {}
@@ -69,6 +65,36 @@ function migrateState(state) {
   }
   if (!state.host.reminders) {
     state.host.reminders = [];
+  }
+
+  // Ensure suggestions object exists
+  if (!state.suggestions) {
+    state.suggestions = {
+      times: [],
+      locations: []
+    };
+  }
+  if (!state.suggestions.times) {
+    state.suggestions.times = [];
+  }
+  if (!state.suggestions.locations) {
+    state.suggestions.locations = [];
+  }
+
+  // Add default options if empty (for migration from old state)
+  if (state.options.times.length === 0 && state.suggestions.times.length === 0) {
+    state.options.times = [
+      { id: 't1', label: 'Fri 7:00 PM' },
+      { id: 't2', label: 'Sat 1:00 PM' },
+      { id: 't3', label: 'Sun 11:00 AM' }
+    ];
+  }
+  if (state.options.locations.length === 0 && state.suggestions.locations.length === 0) {
+    state.options.locations = [
+      { id: 'l1', label: 'Ramen Tatsu-Ya' },
+      { id: 'l2', label: 'Home Poker Night' },
+      { id: 'l3', label: 'Zilker Picnic' }
+    ];
   }
 
   // Migrate organizer fields to event if locked
@@ -167,6 +193,19 @@ function computeWinners(state) {
 
 // Tab management
 function setActiveTab(tabId) {
+  const state = loadState();
+  const isLoggedIn = currentUser && state.host.users.some(u => u.phoneNumber === currentUser);
+
+  // Redirect to signup if trying to access host tab when not logged in
+  if (tabId === 'host' && !isLoggedIn) {
+    tabId = 'signup';
+  }
+
+  // Redirect to event if trying to access signup tab when logged in
+  if (tabId === 'signup' && isLoggedIn) {
+    tabId = 'event';
+  }
+
   currentTab = tabId;
 
   // Update tab buttons
@@ -274,6 +313,9 @@ function render() {
   // Render header (always visible)
   renderHeader(state);
 
+  // Render tab navigation
+  renderTabNav(state);
+
   // Render content based on active tab
   if (currentTab === 'event') {
     renderEventTab(state);
@@ -281,13 +323,48 @@ function render() {
     renderResultsSection(state);
   } else if (currentTab === 'calendar') {
     renderCalendarTab(state);
+  } else if (currentTab === 'signup') {
+    renderSignupTab(state);
   } else if (currentTab === 'host') {
     renderHostTab(state);
   }
 }
 
+function renderTabNav(state) {
+  const nav = document.getElementById('tab-nav');
+  const isLoggedIn = currentUser && state.host.users.some(u => u.phoneNumber === currentUser);
+
+  let tabs = [
+    { id: 'event', label: 'Event' },
+    { id: 'results', label: 'Results' },
+    { id: 'calendar', label: 'Calendar' }
+  ];
+
+  if (isLoggedIn) {
+    tabs.push({ id: 'host', label: 'Host' });
+  } else {
+    tabs.push({ id: 'signup', label: 'Signup' });
+  }
+
+  let html = '';
+  tabs.forEach(tab => {
+    const activeClass = currentTab === tab.id ? 'active' : '';
+    html += `<button class="tab-btn ${activeClass}" data-tab="${tab.id}">${tab.label}</button>`;
+  });
+
+  nav.innerHTML = html;
+
+  // Attach tab navigation
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      setActiveTab(btn.dataset.tab);
+    });
+  });
+}
+
 function renderEventTab(state) {
   renderLockedPlan(state);
+  renderSuggestionSection(state);
   renderVotingSection(state);
   renderRSVPSection(state);
   renderRemindersDisplay(state);
@@ -330,6 +407,49 @@ function renderLockedPlan(state) {
   `;
 
   section.innerHTML = html;
+}
+
+function renderSuggestionSection(state) {
+  const section = document.getElementById('voting-section');
+
+  // Only show suggestions if not locked
+  if (state.locked) {
+    return;
+  }
+
+  const isLoggedIn = currentUser && state.host.users.some(u => u.phoneNumber === currentUser);
+
+  // Non-hosts can suggest times and locations
+  if (!isLoggedIn) {
+    let html = `
+      <h2>Suggest Times & Locations</h2>
+      <p style="color: #4a5568; margin-bottom: 20px;">Suggest options for the group. Hosts will review and approve them for voting.</p>
+      <form id="suggestion-form">
+        <div class="form-group">
+          <label for="suggester-name">Your Name</label>
+          <input type="text" id="suggester-name" placeholder="Enter your name" required>
+        </div>
+        <div class="form-group">
+          <label for="suggestion-type">Suggestion Type</label>
+          <select id="suggestion-type" style="width: 100%; padding: 14px 16px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 15px; background: #fafbfc;">
+            <option value="time">Time</option>
+            <option value="location">Location</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="suggestion-value">Suggestion</label>
+          <input type="text" id="suggestion-value" placeholder="e.g., 'Sat 7:00 PM' or 'Torchy's Tacos'" required>
+        </div>
+        <button type="submit" class="btn btn-primary">Submit Suggestion</button>
+        <div id="suggestion-message"></div>
+      </form>
+    `;
+
+    section.innerHTML = html;
+
+    // Attach form handler
+    document.getElementById('suggestion-form').addEventListener('submit', handleSuggestionSubmit);
+  }
 }
 
 function renderVotingSection(state) {
@@ -579,68 +699,73 @@ function renderCalendarTab(state) {
   document.getElementById('copy-event-btn').addEventListener('click', () => handleCopyEvent(state));
 }
 
+function renderSignupTab(state) {
+  const content = document.getElementById('signup-content');
+
+  let html = `
+    <h2>Sign Up / Sign In</h2>
+    <p style="color: #4a5568; margin-bottom: 20px;">Register with your phone number to become a host and access host controls.</p>
+    <div class="host-login">
+      <form id="phone-signup-form">
+        <div class="form-group">
+          <label for="signup-name">Your Name</label>
+          <input type="text" id="signup-name" placeholder="Enter your name" required>
+        </div>
+        <div class="form-group">
+          <label for="signup-phone">Phone Number</label>
+          <input type="tel" id="signup-phone" placeholder="(555) 123-4567" required>
+        </div>
+        <button type="submit" class="btn btn-primary">Sign Up / Sign In</button>
+      </form>
+      <p class="organizer-error" id="signup-error"></p>
+    </div>
+
+    <div class="reminder-list" style="margin-top: 24px;">
+      <h3>Registered Users</h3>
+  `;
+
+  if (state.host.users.length === 0) {
+    html += '<p style="color: #718096; font-style: italic;">No users registered yet. Be the first!</p>';
+  } else {
+    html += '<p style="color: #4a5568; margin-bottom: 12px;">These users will receive text reminders:</p>';
+    state.host.users.forEach(user => {
+      const maskPhone = (phone) => {
+        const digits = phone.replace(/\D/g, '');
+        if (digits.length >= 4) {
+          return `***-***-${digits.slice(-4)}`;
+        }
+        return '***-****';
+      };
+      html += `
+        <div class="reminder-item sent">
+          <div style="display: flex; justify-content: space-between;">
+            <div>
+              <strong>${escapeHtml(user.name)}</strong>
+              <div style="font-size: 13px; color: #718096; margin-top: 4px;">${maskPhone(user.phoneNumber)}</div>
+            </div>
+            <div style="font-size: 12px; color: #a0aec0;">
+              Joined ${new Date(user.registeredAt).toLocaleDateString()}
+            </div>
+          </div>
+        </div>
+      `;
+    });
+  }
+
+  html += '</div>';
+  content.innerHTML = html;
+
+  // Attach signup handler
+  document.getElementById('phone-signup-form').addEventListener('submit', handlePhoneSignup);
+}
+
 function renderHostTab(state) {
   const content = document.getElementById('host-content');
 
   const isLoggedIn = currentUser && state.host.users.some(u => u.phoneNumber === currentUser);
 
   if (!isLoggedIn) {
-    // Show signup/signin form
-    let html = `
-      <div class="host-login">
-        <h3>Sign Up / Sign In</h3>
-        <p style="color: #4a5568; margin-bottom: 16px;">Register with your phone number to access host controls and receive text reminders.</p>
-        <form id="phone-signup-form">
-          <div class="form-group">
-            <label for="signup-name">Your Name</label>
-            <input type="text" id="signup-name" placeholder="Enter your name" required>
-          </div>
-          <div class="form-group">
-            <label for="signup-phone">Phone Number</label>
-            <input type="tel" id="signup-phone" placeholder="(555) 123-4567" required>
-          </div>
-          <button type="submit" class="btn btn-primary">Sign Up / Sign In</button>
-        </form>
-        <p class="organizer-error" id="signup-error"></p>
-      </div>
-
-      <div class="reminder-list">
-        <h3>Registered Users</h3>
-    `;
-
-    if (state.host.users.length === 0) {
-      html += '<p style="color: #718096; font-style: italic;">No users registered yet. Be the first!</p>';
-    } else {
-      html += '<p style="color: #4a5568; margin-bottom: 12px;">These users will receive text reminders:</p>';
-      state.host.users.forEach(user => {
-        const maskPhone = (phone) => {
-          const digits = phone.replace(/\D/g, '');
-          if (digits.length >= 4) {
-            return `***-***-${digits.slice(-4)}`;
-          }
-          return '***-****';
-        };
-        html += `
-          <div class="reminder-item sent">
-            <div style="display: flex; justify-content: space-between;">
-              <div>
-                <strong>${escapeHtml(user.name)}</strong>
-                <div style="font-size: 13px; color: #718096; margin-top: 4px;">${maskPhone(user.phoneNumber)}</div>
-              </div>
-              <div style="font-size: 12px; color: #a0aec0;">
-                Joined ${new Date(user.registeredAt).toLocaleDateString()}
-              </div>
-            </div>
-          </div>
-        `;
-      });
-    }
-
-    html += '</div>';
-    content.innerHTML = html;
-
-    // Attach signup handler
-    document.getElementById('phone-signup-form').addEventListener('submit', handlePhoneSignup);
+    content.innerHTML = '<p style="text-align: center; padding: 40px; color: #718096;">Please sign up in the Signup tab to access host controls.</p>';
     return;
   }
 
@@ -654,6 +779,97 @@ function renderHostTab(state) {
           <p style="color: #155724; font-size: 14px; margin: 0;">Phone: ${currentUserData.phoneNumber}</p>
         </div>
         <button id="sign-out-btn" class="btn btn-secondary" style="margin: 0;">Sign Out</button>
+      </div>
+    </div>
+  `;
+
+  // Pending suggestions
+  const pendingTimes = state.suggestions.times.filter(s => !s.approved);
+  const pendingLocations = state.suggestions.locations.filter(s => !s.approved);
+
+  if (pendingTimes.length > 0 || pendingLocations.length > 0) {
+    html += `
+      <div class="reminder-form">
+        <h3>Pending Suggestions</h3>
+        <p style="color: #4a5568; margin-bottom: 16px;">Review and approve suggestions from participants.</p>
+    `;
+
+    if (pendingTimes.length > 0) {
+      html += '<h4 style="font-size: 16px; margin-top: 12px; margin-bottom: 8px;">Time Suggestions</h4>';
+      pendingTimes.forEach(suggestion => {
+        html += `
+          <div class="reminder-item" style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+              <strong>${escapeHtml(suggestion.label)}</strong>
+              <div style="font-size: 13px; color: #718096; margin-top: 4px;">Suggested by ${escapeHtml(suggestion.suggestedBy)}</div>
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <button class="btn btn-success" style="padding: 8px 16px; font-size: 13px; margin: 0;" onclick="handleApproveSuggestion('time', '${suggestion.id}')">Approve</button>
+              <button class="btn btn-danger" style="padding: 8px 16px; font-size: 13px; margin: 0;" onclick="handleRejectSuggestion('time', '${suggestion.id}')">Reject</button>
+            </div>
+          </div>
+        `;
+      });
+    }
+
+    if (pendingLocations.length > 0) {
+      html += '<h4 style="font-size: 16px; margin-top: 16px; margin-bottom: 8px;">Location Suggestions</h4>';
+      pendingLocations.forEach(suggestion => {
+        html += `
+          <div class="reminder-item" style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+              <strong>${escapeHtml(suggestion.label)}</strong>
+              <div style="font-size: 13px; color: #718096; margin-top: 4px;">Suggested by ${escapeHtml(suggestion.suggestedBy)}</div>
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <button class="btn btn-success" style="padding: 8px 16px; font-size: 13px; margin: 0;" onclick="handleApproveSuggestion('location', '${suggestion.id}')">Approve</button>
+              <button class="btn btn-danger" style="padding: 8px 16px; font-size: 13px; margin: 0;" onclick="handleRejectSuggestion('location', '${suggestion.id}')">Reject</button>
+            </div>
+          </div>
+        `;
+      });
+    }
+
+    html += '</div>';
+  }
+
+  // Add times and locations
+  html += `
+    <div class="reminder-form">
+      <h3>Add Times & Locations</h3>
+      <p style="color: #4a5568; margin-bottom: 16px;">Add options for the group to vote on.</p>
+      <form id="add-option-form">
+        <div class="form-group">
+          <label for="option-type">Option Type</label>
+          <select id="option-type" style="width: 100%; padding: 14px 16px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 15px; background: #fafbfc;">
+            <option value="time">Time</option>
+            <option value="location">Location</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="option-value">Option Value</label>
+          <input type="text" id="option-value" placeholder="e.g., 'Sat 7:00 PM' or 'Torchy's Tacos'" required style="width: 100%; padding: 14px 16px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 15px; background: #fafbfc;">
+        </div>
+        <button type="submit" class="btn btn-primary">Add Option</button>
+        <div id="add-option-message"></div>
+      </form>
+
+      <div style="margin-top: 20px;">
+        <h4 style="font-size: 16px; margin-bottom: 12px;">Current Times (${state.options.times.length})</h4>
+        ${state.options.times.length > 0 ? state.options.times.map(t => `
+          <div class="reminder-item sent" style="display: flex; justify-content: space-between; align-items: center;">
+            <span>${escapeHtml(t.label)}</span>
+            <button class="btn btn-danger" style="padding: 8px 16px; font-size: 13px; margin: 0;" onclick="handleRemoveOption('time', '${t.id}')">Remove</button>
+          </div>
+        `).join('') : '<p style="color: #718096; font-style: italic;">No times added yet</p>'}
+
+        <h4 style="font-size: 16px; margin-top: 16px; margin-bottom: 12px;">Current Locations (${state.options.locations.length})</h4>
+        ${state.options.locations.length > 0 ? state.options.locations.map(l => `
+          <div class="reminder-item sent" style="display: flex; justify-content: space-between; align-items: center;">
+            <span>${escapeHtml(l.label)}</span>
+            <button class="btn btn-danger" style="padding: 8px 16px; font-size: 13px; margin: 0;" onclick="handleRemoveOption('location', '${l.id}')">Remove</button>
+          </div>
+        `).join('') : '<p style="color: #718096; font-style: italic;">No locations added yet</p>'}
       </div>
     </div>
   `;
@@ -765,6 +981,11 @@ function renderHostTab(state) {
   const signOutBtn = document.getElementById('sign-out-btn');
   if (signOutBtn) {
     signOutBtn.addEventListener('click', handleSignOut);
+  }
+
+  const addOptionForm = document.getElementById('add-option-form');
+  if (addOptionForm) {
+    addOptionForm.addEventListener('submit', handleAddOption);
   }
 
   const datetimeForm = document.getElementById('datetime-form');
@@ -974,6 +1195,142 @@ function handlePhoneSignup(e) {
 
 function handleSignOut() {
   currentUser = null;
+  currentTab = 'event';
+  render();
+}
+
+function handleSuggestionSubmit(e) {
+  e.preventDefault();
+
+  const name = document.getElementById('suggester-name').value.trim();
+  const type = document.getElementById('suggestion-type').value;
+  const value = document.getElementById('suggestion-value').value.trim();
+  const messageDiv = document.getElementById('suggestion-message');
+
+  if (!name || !value) {
+    messageDiv.innerHTML = '<div class="error">Please fill in all fields</div>';
+    return;
+  }
+
+  const state = loadState();
+
+  const suggestion = {
+    id: `s${Date.now()}`,
+    label: value,
+    suggestedBy: name,
+    suggestedAt: Date.now(),
+    approved: false
+  };
+
+  if (type === 'time') {
+    state.suggestions.times.push(suggestion);
+  } else {
+    state.suggestions.locations.push(suggestion);
+  }
+
+  saveState(state);
+
+  messageDiv.innerHTML = '<div class="confirmation">Suggestion submitted! Waiting for host approval.</div>';
+  e.target.reset();
+
+  setTimeout(() => {
+    messageDiv.innerHTML = '';
+  }, 3000);
+}
+
+function handleAddOption(e) {
+  e.preventDefault();
+
+  const type = document.getElementById('option-type').value;
+  const value = document.getElementById('option-value').value.trim();
+  const messageDiv = document.getElementById('add-option-message');
+
+  if (!value) {
+    messageDiv.innerHTML = '<div class="error">Please enter a value</div>';
+    return;
+  }
+
+  const state = loadState();
+
+  const option = {
+    id: `${type[0]}${Date.now()}`,
+    label: value
+  };
+
+  if (type === 'time') {
+    state.options.times.push(option);
+  } else {
+    state.options.locations.push(option);
+  }
+
+  saveState(state);
+
+  messageDiv.innerHTML = '<div class="confirmation">Option added!</div>';
+  e.target.reset();
+
+  setTimeout(() => {
+    messageDiv.innerHTML = '';
+    render();
+  }, 1500);
+}
+
+function handleApproveSuggestion(type, id) {
+  const state = loadState();
+
+  const suggestionList = type === 'time' ? state.suggestions.times : state.suggestions.locations;
+  const suggestion = suggestionList.find(s => s.id === id);
+
+  if (suggestion) {
+    const option = {
+      id: suggestion.id,
+      label: suggestion.label
+    };
+
+    if (type === 'time') {
+      state.options.times.push(option);
+    } else {
+      state.options.locations.push(option);
+    }
+
+    // Remove from suggestions
+    if (type === 'time') {
+      state.suggestions.times = state.suggestions.times.filter(s => s.id !== id);
+    } else {
+      state.suggestions.locations = state.suggestions.locations.filter(s => s.id !== id);
+    }
+
+    saveState(state);
+    render();
+  }
+}
+
+function handleRejectSuggestion(type, id) {
+  const state = loadState();
+
+  if (type === 'time') {
+    state.suggestions.times = state.suggestions.times.filter(s => s.id !== id);
+  } else {
+    state.suggestions.locations = state.suggestions.locations.filter(s => s.id !== id);
+  }
+
+  saveState(state);
+  render();
+}
+
+function handleRemoveOption(type, id) {
+  if (!confirm('Remove this option? This will affect ongoing votes.')) {
+    return;
+  }
+
+  const state = loadState();
+
+  if (type === 'time') {
+    state.options.times = state.options.times.filter(t => t.id !== id);
+  } else {
+    state.options.locations = state.options.locations.filter(l => l.id !== id);
+  }
+
+  saveState(state);
   render();
 }
 
@@ -1090,13 +1447,6 @@ function escapeHtml(text) {
 document.addEventListener('DOMContentLoaded', () => {
   // Initial render
   render();
-
-  // Attach tab navigation
-  document.querySelectorAll('.tab-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      setActiveTab(btn.dataset.tab);
-    });
-  });
 
   // Start reminder check interval (every 30 seconds)
   setInterval(() => {
