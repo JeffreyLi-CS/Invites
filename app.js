@@ -4,8 +4,7 @@ const ORGANIZER_PASSWORD = 'admin';
 
 // Global state
 let currentTab = 'event';
-let hostUnlocked = false;
-let reminderCheckInterval = null;
+let currentUser = null; // phone number of logged in user
 
 // State management
 function seedState() {
@@ -25,6 +24,7 @@ function seedState() {
     },
     host: {
       pass: 'admin',
+      users: [], // [{ phoneNumber, name, registeredAt }]
       reminders: []
     },
     options: {
@@ -60,8 +60,12 @@ function migrateState(state) {
   if (!state.host) {
     state.host = {
       pass: 'admin',
+      users: [],
       reminders: []
     };
+  }
+  if (!state.host.users) {
+    state.host.users = [];
   }
   if (!state.host.reminders) {
     state.host.reminders = [];
@@ -512,14 +516,15 @@ function renderRemindersDisplay(state) {
 
   let html = `
     <div class="reminders-display">
-      <h3>📢 Announcements</h3>
+      <h3>📱 Text Messages</h3>
   `;
 
   sentReminders.forEach(reminder => {
     const createdDate = new Date(reminder.createdAt);
+    const recipientCount = state.host.users.length;
     html += `
       <div class="reminder-display-item">
-        <div class="reminder-display-time">${createdDate.toLocaleString()}</div>
+        <div class="reminder-display-time">${createdDate.toLocaleString()} • Sent to ${recipientCount} user${recipientCount !== 1 ? 's' : ''}</div>
         <div class="reminder-display-message">${escapeHtml(reminder.message)}</div>
       </div>
     `;
@@ -577,18 +582,193 @@ function renderCalendarTab(state) {
 function renderHostTab(state) {
   const content = document.getElementById('host-content');
 
-  let html = `
-    <div class="host-login">
-      <div class="form-group">
-        <label for="host-password">Host Password</label>
-        <input type="password" id="host-password" placeholder="Enter host password">
+  const isLoggedIn = currentUser && state.host.users.some(u => u.phoneNumber === currentUser);
+
+  if (!isLoggedIn) {
+    // Show signup/signin form
+    let html = `
+      <div class="host-login">
+        <h3>Sign Up / Sign In</h3>
+        <p style="color: #4a5568; margin-bottom: 16px;">Register with your phone number to access host controls and receive text reminders.</p>
+        <form id="phone-signup-form">
+          <div class="form-group">
+            <label for="signup-name">Your Name</label>
+            <input type="text" id="signup-name" placeholder="Enter your name" required>
+          </div>
+          <div class="form-group">
+            <label for="signup-phone">Phone Number</label>
+            <input type="tel" id="signup-phone" placeholder="(555) 123-4567" required>
+          </div>
+          <button type="submit" class="btn btn-primary">Sign Up / Sign In</button>
+        </form>
+        <p class="organizer-error" id="signup-error"></p>
       </div>
-      <button id="host-unlock-btn" class="btn btn-primary">Unlock Host Controls</button>
-      <p class="organizer-error" id="host-error"></p>
+
+      <div class="reminder-list">
+        <h3>Registered Users</h3>
+    `;
+
+    if (state.host.users.length === 0) {
+      html += '<p style="color: #718096; font-style: italic;">No users registered yet. Be the first!</p>';
+    } else {
+      html += '<p style="color: #4a5568; margin-bottom: 12px;">These users will receive text reminders:</p>';
+      state.host.users.forEach(user => {
+        const maskPhone = (phone) => {
+          const digits = phone.replace(/\D/g, '');
+          if (digits.length >= 4) {
+            return `***-***-${digits.slice(-4)}`;
+          }
+          return '***-****';
+        };
+        html += `
+          <div class="reminder-item sent">
+            <div style="display: flex; justify-content: space-between;">
+              <div>
+                <strong>${escapeHtml(user.name)}</strong>
+                <div style="font-size: 13px; color: #718096; margin-top: 4px;">${maskPhone(user.phoneNumber)}</div>
+              </div>
+              <div style="font-size: 12px; color: #a0aec0;">
+                Joined ${new Date(user.registeredAt).toLocaleDateString()}
+              </div>
+            </div>
+          </div>
+        `;
+      });
+    }
+
+    html += '</div>';
+    content.innerHTML = html;
+
+    // Attach signup handler
+    document.getElementById('phone-signup-form').addEventListener('submit', handlePhoneSignup);
+    return;
+  }
+
+  // User is logged in - show full host controls
+  const currentUserData = state.host.users.find(u => u.phoneNumber === currentUser);
+  let html = `
+    <div class="host-login" style="background: linear-gradient(135deg, #d4edda 0%, #c3f0ca 100%); border-color: #28a745;">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div>
+          <h3 style="color: #155724; margin-bottom: 4px;">Signed in as ${escapeHtml(currentUserData.name)}</h3>
+          <p style="color: #155724; font-size: 14px; margin: 0;">Phone: ${currentUserData.phoneNumber}</p>
+        </div>
+        <button id="sign-out-btn" class="btn btn-secondary" style="margin: 0;">Sign Out</button>
+      </div>
     </div>
   `;
 
-  if (hostUnlocked) {
+  // Event datetime editing
+  const startValue = state.event.startAtISO ? new Date(state.event.startAtISO).toISOString().slice(0, 16) : '';
+  const endValue = state.event.endAtISO ? new Date(state.event.endAtISO).toISOString().slice(0, 16) : '';
+
+  html += `
+    <div class="event-datetime-edit">
+      <h3>Event Date & Time</h3>
+      <form id="datetime-form">
+        <div class="datetime-grid">
+          <div class="form-group">
+            <label for="event-start">Start</label>
+            <input type="datetime-local" id="event-start" value="${startValue}">
+          </div>
+          <div class="form-group">
+            <label for="event-end">End</label>
+            <input type="datetime-local" id="event-end" value="${endValue}">
+          </div>
+        </div>
+        <button type="submit" class="btn btn-primary">Save Date & Time</button>
+      </form>
+    </div>
+
+    <div class="reminder-form">
+      <h3>Send Text Reminder</h3>
+      <p style="color: #4a5568; margin-bottom: 16px;">Send a text message to all ${state.host.users.length} registered user${state.host.users.length !== 1 ? 's' : ''}.</p>
+      <form id="reminder-form">
+        <div class="form-group">
+          <label for="reminder-message">Message</label>
+          <textarea id="reminder-message" rows="3" placeholder="Enter text message" required style="width: 100%; padding: 14px 16px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 15px; background: #fafbfc; font-family: inherit;"></textarea>
+        </div>
+        <div class="form-group">
+          <label for="reminder-sendAt">Send At (optional - leave blank to send immediately)</label>
+          <input type="datetime-local" id="reminder-sendAt">
+        </div>
+        <button type="submit" class="btn btn-primary">Send Text Message</button>
+        <div id="reminder-message-feedback"></div>
+      </form>
+    </div>
+  `;
+
+  // Reminder list
+  html += '<div class="reminder-list"><h3>Text Message History</h3>';
+
+  if (state.host.reminders.length === 0) {
+    html += '<p style="color: #718096; font-style: italic;">No text messages sent yet</p>';
+  } else {
+    const reminders = state.host.reminders.sort((a, b) => b.createdAt - a.createdAt);
+
+    reminders.forEach(reminder => {
+      const isSent = reminder.sent || (!reminder.sendAtISO);
+      const badge = isSent ? 'sent' : 'scheduled';
+      const badgeText = isSent ? 'Sent' : 'Scheduled';
+      const createdDate = new Date(reminder.createdAt);
+      const sendDate = reminder.sendAtISO ? new Date(reminder.sendAtISO) : null;
+      const recipientCount = state.host.users.length;
+
+      html += `
+        <div class="reminder-item ${badge}">
+          <div class="reminder-header">
+            <span class="reminder-badge ${badge}">${badgeText}</span>
+            <span style="font-size: 13px; color: #718096;">${createdDate.toLocaleString()}</span>
+          </div>
+          <div class="reminder-message">${escapeHtml(reminder.message)}</div>
+          <div style="font-size: 13px; color: #718096; margin-top: 8px;">Recipients: ${recipientCount} user${recipientCount !== 1 ? 's' : ''}</div>
+      `;
+
+      if (sendDate && !isSent) {
+        html += `<div class="reminder-time">Scheduled for: ${sendDate.toLocaleString()}</div>`;
+      }
+
+      html += `
+          <div class="reminder-actions">
+      `;
+      if (!isSent) {
+        html += `<button class="btn btn-success" onclick="handleSendNow('${reminder.id}')">Send Now</button>`;
+      }
+      html += `
+            <button class="btn btn-danger" onclick="handleDeleteReminder('${reminder.id}')">Delete</button>
+          </div>
+        </div>
+      `;
+    });
+  }
+
+  html += '</div>';
+
+  // Organizer controls (lock/reset)
+  html += `
+    <div class="event-datetime-edit" style="margin-top: 20px;">
+      <h3>Organizer Controls</h3>
+      <div class="organizer-controls">
+        <div class="form-group">
+          <input type="password" id="organizer-password" placeholder="Organizer password" value="admin">
+        </div>
+        <button id="lock-btn" class="btn btn-primary" ${state.locked ? 'disabled' : ''}>Lock Plan</button>
+        <button id="reset-btn" class="btn btn-secondary">Reset Demo</button>
+      </div>
+      <p class="organizer-error" id="organizer-error"></p>
+    </div>
+  `;
+
+  content.innerHTML = html;
+
+  // Attach event listeners
+  const signOutBtn = document.getElementById('sign-out-btn');
+  if (signOutBtn) {
+    signOutBtn.addEventListener('click', handleSignOut);
+  }
+
+  const datetimeForm = document.getElementById('datetime-form');
+  if (datetimeForm) {
     // Event datetime editing
     const startValue = state.event.startAtISO ? new Date(state.event.startAtISO).toISOString().slice(0, 16) : '';
     const endValue = state.event.endAtISO ? new Date(state.event.endAtISO).toISOString().slice(0, 16) : '';
@@ -854,25 +1034,61 @@ function handleResetDemo() {
   if (confirm('Are you sure you want to reset the demo? All data will be cleared.')) {
     const freshState = seedState();
     saveState(freshState);
-    hostUnlocked = false;
+    currentUser = null;
     render();
   }
 }
 
-function handleHostUnlock() {
-  const password = document.getElementById('host-password').value;
-  const errorDiv = document.getElementById('host-error');
+function handlePhoneSignup(e) {
+  e.preventDefault();
 
-  if (password !== ORGANIZER_PASSWORD) {
-    errorDiv.textContent = 'Incorrect password';
+  const name = document.getElementById('signup-name').value.trim();
+  const phone = document.getElementById('signup-phone').value.trim();
+  const errorDiv = document.getElementById('signup-error');
+
+  if (!name || !phone) {
+    errorDiv.textContent = 'Please enter both name and phone number';
     setTimeout(() => {
       errorDiv.textContent = '';
     }, 3000);
     return;
   }
 
-  hostUnlocked = true;
-  errorDiv.textContent = '';
+  // Basic phone validation
+  const phoneDigits = phone.replace(/\D/g, '');
+  if (phoneDigits.length < 10) {
+    errorDiv.textContent = 'Please enter a valid phone number';
+    setTimeout(() => {
+      errorDiv.textContent = '';
+    }, 3000);
+    return;
+  }
+
+  const state = loadState();
+
+  // Check if user exists
+  const existingUser = state.host.users.find(u => u.phoneNumber === phone);
+
+  if (existingUser) {
+    // Sign in existing user
+    currentUser = phone;
+    errorDiv.textContent = '';
+    render();
+  } else {
+    // Register new user
+    state.host.users.push({
+      phoneNumber: phone,
+      name: name,
+      registeredAt: Date.now()
+    });
+    saveState(state);
+    currentUser = phone;
+    render();
+  }
+}
+
+function handleSignOut() {
+  currentUser = null;
   render();
 }
 
@@ -998,7 +1214,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // Start reminder check interval (every 30 seconds)
-  reminderCheckInterval = setInterval(() => {
+  setInterval(() => {
     const state = loadState();
     if (processScheduledReminders(state)) {
       render();
