@@ -683,6 +683,9 @@ h2, h3 {
 .reminders-display h3 {
   color: #c53030;
   margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .reminder-display-item {
