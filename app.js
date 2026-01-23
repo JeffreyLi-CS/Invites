@@ -1,11 +1,50 @@
 // Constants
 const ORGANIZER_PASSWORD = 'admin';
 const CURRENT_EVENT_KEY = 'invites_current_event_id';
+const CURRENT_USER_KEY = 'invites_current_user';
+const GLOBAL_USERS_KEY = 'invites_global_users';
 
 // Global state
 let currentTab = 'event';
-let currentUser = null; // phone number of logged in user
+let currentUser = null; // { phoneNumber, name } - persists across events
 let currentEventId = null; // current event ID
+
+// Global user management
+function getGlobalUsers() {
+  try {
+    const stored = localStorage.getItem(GLOBAL_USERS_KEY);
+    return stored ? JSON.parse(stored) : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function saveGlobalUsers(users) {
+  try {
+    localStorage.setItem(GLOBAL_USERS_KEY, JSON.stringify(users));
+  } catch (e) {
+    console.error('Failed to save global users:', e);
+  }
+}
+
+function getCurrentUser() {
+  try {
+    const stored = localStorage.getItem(CURRENT_USER_KEY);
+    return stored ? JSON.parse(stored) : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function setCurrentUser(user) {
+  if (user) {
+    localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(user));
+    currentUser = user;
+  } else {
+    localStorage.removeItem(CURRENT_USER_KEY);
+    currentUser = null;
+  }
+}
 
 // Utility function to generate random event ID
 function generateEventId() {
@@ -173,6 +212,16 @@ function setCurrentEventId(eventId) {
 function createNewEvent() {
   const newEventId = generateEventId();
   const newState = seedState(newEventId);
+
+  // Add current user to the event
+  if (currentUser) {
+    newState.host.users.push({
+      phoneNumber: currentUser.phoneNumber,
+      name: currentUser.name,
+      registeredAt: Date.now()
+    });
+  }
+
   saveState(newState);
   setCurrentEventId(newEventId);
   return newEventId;
@@ -183,6 +232,21 @@ function joinEvent(eventId) {
   const stored = localStorage.getItem(getStateKey(upperEventId));
   if (stored) {
     setCurrentEventId(upperEventId);
+
+    // Add current user to event if not already there
+    if (currentUser) {
+      const state = loadState();
+      const existingUser = state.host.users.find(u => u.phoneNumber === currentUser.phoneNumber);
+      if (!existingUser) {
+        state.host.users.push({
+          phoneNumber: currentUser.phoneNumber,
+          name: currentUser.name,
+          registeredAt: Date.now()
+        });
+        saveState(state);
+      }
+    }
+
     return true;
   }
   return false;
@@ -252,17 +316,6 @@ function setActiveTab(tabId) {
   const state = loadState();
   if (!state) {
     return;
-  }
-  const isLoggedIn = currentUser && state.host.users.some(u => u.phoneNumber === currentUser);
-
-  // Redirect to event if trying to access host tab when not logged in
-  if (tabId === 'host' && !isLoggedIn) {
-    tabId = 'signup';
-  }
-
-  // Redirect to event if trying to access signup tab when logged in
-  if (tabId === 'signup' && isLoggedIn) {
-    tabId = 'event';
   }
 
   currentTab = tabId;
@@ -394,8 +447,6 @@ function render() {
     renderResultsSection(state);
   } else if (currentTab === 'calendar') {
     renderCalendarTab(state);
-  } else if (currentTab === 'signup') {
-    renderSignupTab(state);
   } else if (currentTab === 'host') {
     renderHostTab(state);
   }
@@ -454,15 +505,6 @@ function ensureNormalStructure() {
         </section>
       </div>
 
-      <!-- Signup Tab -->
-      <div id="tab-signup" class="tab-panel">
-        <section class="section">
-          <div id="signup-content">
-            <!-- Signup form rendered here -->
-          </div>
-        </section>
-      </div>
-
       <!-- Host Tab -->
       <div id="tab-host" class="tab-panel">
         <section class="section host-section">
@@ -482,63 +524,97 @@ function ensureNormalStructure() {
 
 function renderEventSelection() {
   const container = document.querySelector('.container');
-  container.innerHTML = `
-    <header style="background: rgba(255, 255, 255, 0.98); border-radius: 16px; padding: 40px 32px; margin-bottom: 24px; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12); text-align: center;">
-      <h1 style="font-size: 40px; margin-bottom: 12px; color: #1a202c; font-weight: 800; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; letter-spacing: -0.5px;">Invites+</h1>
-      <p style="color: #4a5568; margin-bottom: 0; font-size: 16px; line-height: 1.7;">Create or join an event to get started</p>
-    </header>
 
-    <div class="section" style="text-align: center;">
-      <h2 style="margin-bottom: 24px;">Get Started</h2>
+  if (!currentUser) {
+    // Show signup/login screen
+    container.innerHTML = `
+      <header style="background: rgba(255, 255, 255, 0.98); border-radius: 16px; padding: 40px 32px; margin-bottom: 24px; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12); text-align: center;">
+        <h1 style="font-size: 40px; margin-bottom: 12px; color: #1a202c; font-weight: 800; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; letter-spacing: -0.5px;">Invites+</h1>
+        <p style="color: #4a5568; margin-bottom: 0; font-size: 16px; line-height: 1.7;">Sign up or sign in to get started</p>
+      </header>
 
-      <div style="margin-bottom: 32px;">
-        <h3 style="font-size: 18px; margin-bottom: 16px; color: #2d3748;">Create New Event</h3>
-        <p style="color: #718096; margin-bottom: 16px;">Start a new event and share the code with your friends</p>
-        <button id="create-event-btn" class="btn btn-primary" style="font-size: 16px; padding: 16px 32px;">
-          ✨ Generate Event ID
-        </button>
+      <div class="section">
+        <h2 style="margin-bottom: 20px;">Sign Up / Sign In</h2>
+        <p style="color: #4a5568; margin-bottom: 20px;">Enter your details to create or join events</p>
+        <div class="host-login">
+          <form id="global-signup-form">
+            <div class="form-group">
+              <label for="global-signup-name">Your Name</label>
+              <input type="text" id="global-signup-name" placeholder="Enter your name" required>
+            </div>
+            <div class="form-group">
+              <label for="global-signup-phone">Phone Number</label>
+              <input type="tel" id="global-signup-phone" placeholder="(555) 123-4567" required>
+            </div>
+            <button type="submit" class="btn btn-primary">Continue</button>
+          </form>
+          <p class="organizer-error" id="global-signup-error"></p>
+        </div>
       </div>
 
-      <div style="border-top: 2px solid #e2e8f0; padding-top: 32px;">
-        <h3 style="font-size: 18px; margin-bottom: 16px; color: #2d3748;">Join Existing Event</h3>
-        <p style="color: #718096; margin-bottom: 16px;">Enter an event code to join</p>
-        <form id="join-event-form" style="max-width: 400px; margin: 0 auto;">
-          <div class="form-group">
-            <input type="text" id="join-event-id" placeholder="Enter Event ID (e.g., ABC123)" required style="text-align: center; font-size: 18px; letter-spacing: 2px; text-transform: uppercase; font-weight: 600;">
-          </div>
-          <button type="submit" class="btn btn-success" style="width: 100%; font-size: 16px; padding: 16px;">
-            Join Event
+      <footer class="demo-tip">
+        <p><strong>💡 How it works:</strong> Sign up once • Create or join multiple events • Your account works across all events</p>
+      </footer>
+    `;
+
+    // Attach event listener
+    document.getElementById('global-signup-form').addEventListener('submit', handleGlobalSignup);
+  } else {
+    // Show create/join options
+    container.innerHTML = `
+      <header style="background: rgba(255, 255, 255, 0.98); border-radius: 16px; padding: 40px 32px; margin-bottom: 24px; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12); text-align: center;">
+        <h1 style="font-size: 40px; margin-bottom: 12px; color: #1a202c; font-weight: 800; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; letter-spacing: -0.5px;">Invites+</h1>
+        <p style="color: #4a5568; margin-bottom: 8px; font-size: 16px; line-height: 1.7;">Welcome back, ${escapeHtml(currentUser.name)}!</p>
+        <button id="global-signout-btn" class="btn btn-secondary" style="font-size: 13px; padding: 8px 16px; margin-top: 8px;">Sign Out</button>
+      </header>
+
+      <div class="section" style="text-align: center;">
+        <h2 style="margin-bottom: 24px;">Get Started</h2>
+
+        <div style="margin-bottom: 32px;">
+          <h3 style="font-size: 18px; margin-bottom: 16px; color: #2d3748;">Create New Event</h3>
+          <p style="color: #718096; margin-bottom: 16px;">Start a new event and share the code with your friends</p>
+          <button id="create-event-btn" class="btn btn-primary" style="font-size: 16px; padding: 16px 32px;">
+            ✨ Generate Event ID
           </button>
-          <div id="join-error" class="organizer-error" style="margin-top: 12px;"></div>
-        </form>
+        </div>
+
+        <div style="border-top: 2px solid #e2e8f0; padding-top: 32px;">
+          <h3 style="font-size: 18px; margin-bottom: 16px; color: #2d3748;">Join Existing Event</h3>
+          <p style="color: #718096; margin-bottom: 16px;">Enter an event code to join</p>
+          <form id="join-event-form" style="max-width: 400px; margin: 0 auto;">
+            <div class="form-group">
+              <input type="text" id="join-event-id" placeholder="Enter Event ID (e.g., ABC123)" required style="text-align: center; font-size: 18px; letter-spacing: 2px; text-transform: uppercase; font-weight: 600;">
+            </div>
+            <button type="submit" class="btn btn-success" style="width: 100%; font-size: 16px; padding: 16px;">
+              Join Event
+            </button>
+            <div id="join-error" class="organizer-error" style="margin-top: 12px;"></div>
+          </form>
+        </div>
       </div>
-    </div>
 
-    <footer class="demo-tip">
-      <p><strong>💡 How it works:</strong> Create a new event to get a unique ID • Share the ID with participants • Everyone can help organize the event together</p>
-    </footer>
-  `;
+      <footer class="demo-tip">
+        <p><strong>💡 How it works:</strong> Create a new event to get a unique ID • Share the ID with participants • Everyone can help organize the event together</p>
+      </footer>
+    `;
 
-  // Attach event listeners
-  document.getElementById('create-event-btn').addEventListener('click', handleCreateEvent);
-  document.getElementById('join-event-form').addEventListener('submit', handleJoinEvent);
+    // Attach event listeners
+    document.getElementById('global-signout-btn').addEventListener('click', handleGlobalSignOut);
+    document.getElementById('create-event-btn').addEventListener('click', handleCreateEvent);
+    document.getElementById('join-event-form').addEventListener('submit', handleJoinEvent);
+  }
 }
 
 function renderTabNav(state) {
   const nav = document.getElementById('tab-nav');
-  const isLoggedIn = currentUser && state.host.users.some(u => u.phoneNumber === currentUser);
 
   let tabs = [
     { id: 'event', label: 'Event' },
     { id: 'results', label: 'Results' },
-    { id: 'calendar', label: 'Calendar' }
+    { id: 'calendar', label: 'Calendar' },
+    { id: 'host', label: 'Host' }
   ];
-
-  if (isLoggedIn) {
-    tabs.push({ id: 'host', label: 'Host' });
-  } else {
-    tabs.push({ id: 'signup', label: 'Signup' });
-  }
 
   let html = '';
   tabs.forEach(tab => {
@@ -623,10 +699,7 @@ function renderSuggestionSection(state) {
     return;
   }
 
-  const isLoggedIn = currentUser && state.host.users.some(u => u.phoneNumber === currentUser);
-  const currentUserData = isLoggedIn ? state.host.users.find(u => u.phoneNumber === currentUser) : null;
-
-  // Anyone can suggest times and locations (non-logged-in or logged-in users)
+  // Everyone is logged in when accessing events
   let html = `
     <div class="section">
       <h2>Suggest Times & Locations</h2>
@@ -634,13 +707,9 @@ function renderSuggestionSection(state) {
       <form id="suggestion-form">
         <div class="form-group">
           <label for="suggester-name">Your Name</label>
+          <input type="text" id="suggester-name" value="${escapeHtml(currentUser.name)}" readonly style="background: #e2e8f0; cursor: not-allowed;" required>
+        </div>
   `;
-
-  if (isLoggedIn) {
-    html += `<input type="text" id="suggester-name" value="${escapeHtml(currentUserData.name)}" readonly style="background: #e2e8f0; cursor: not-allowed;" required>`;
-  } else {
-    html += `<input type="text" id="suggester-name" placeholder="Enter your name" required>`;
-  }
 
   html += `
         </div>
@@ -675,33 +744,14 @@ function renderVotingSection(state) {
     return;
   }
 
-  // Get logged in user name if available
-  const isLoggedIn = currentUser && state.host.users.some(u => u.phoneNumber === currentUser);
-  const currentUserData = isLoggedIn ? state.host.users.find(u => u.phoneNumber === currentUser) : null;
-
-  if (!isLoggedIn) {
-    section.innerHTML = `
-      <div class="section">
-        <h2>Cast Your Vote</h2>
-        <div style="text-align: center; padding: 40px 20px; background: linear-gradient(135deg, #fff5f5 0%, #ffe5e5 100%); border-radius: 12px; border: 2px solid #fc8181;">
-          <p style="color: #742a2a; font-size: 16px; font-weight: 500; margin-bottom: 16px;">Please sign up to vote</p>
-          <p style="color: #742a2a; margin-bottom: 20px;">You need to register with your phone number before you can cast your vote.</p>
-          <button class="btn btn-primary" onclick="setActiveTab('signup')">Go to Signup</button>
-        </div>
-      </div>
-    `;
-    return;
-  }
-
-  const defaultName = currentUserData.name;
-
+  // Everyone is logged in when accessing events
   let html = `
     <div class="section">
       <h2>Cast Your Vote</h2>
       <form id="vote-form">
         <div class="form-group">
           <label for="voter-name">Your Name</label>
-          <input type="text" id="voter-name" value="${escapeHtml(defaultName)}" readonly style="background: #e2e8f0; cursor: not-allowed;" required>
+          <input type="text" id="voter-name" value="${escapeHtml(currentUser.name)}" readonly style="background: #e2e8f0; cursor: not-allowed;" required>
         </div>
 
         <div class="form-group">
@@ -815,54 +865,14 @@ function renderRSVPSection(state) {
     return;
   }
 
-  // Get logged in user name if available
-  const isLoggedIn = currentUser && state.host.users.some(u => u.phoneNumber === currentUser);
-  const currentUserData = isLoggedIn ? state.host.users.find(u => u.phoneNumber === currentUser) : null;
-
-  if (!isLoggedIn) {
-    let html = `
-      <div class="section">
-        <h2>RSVP</h2>
-        <div style="text-align: center; padding: 40px 20px; background: linear-gradient(135deg, #fff5f5 0%, #ffe5e5 100%); border-radius: 12px; border: 2px solid #fc8181;">
-          <p style="color: #742a2a; font-size: 16px; font-weight: 500; margin-bottom: 16px;">Please sign up to RSVP</p>
-          <p style="color: #742a2a; margin-bottom: 20px;">You need to register with your phone number before you can confirm your attendance.</p>
-          <button class="btn btn-primary" onclick="setActiveTab('signup')">Go to Signup</button>
-        </div>
-
-        <div class="attendee-list">
-          <h4>Attendees</h4>
-    `;
-
-    const going = Object.entries(state.rsvps)
-      .filter(([_, rsvp]) => rsvp.status === 'going')
-      .map(([name, _]) => name);
-
-    html += `<div class="attendee-count">${going.length} going</div>`;
-
-    if (going.length > 0) {
-      html += '<ul>';
-      going.forEach(name => {
-        html += `<li>${escapeHtml(name)}</li>`;
-      });
-      html += '</ul>';
-    } else {
-      html += '<p style="color: #718096; font-style: italic;">No one has confirmed yet</p>';
-    }
-
-    html += '</div></div>';
-    section.innerHTML = html;
-    return;
-  }
-
-  const defaultName = currentUserData.name;
-
+  // Everyone is logged in when accessing events
   let html = `
     <div class="section">
       <h2>RSVP</h2>
       <form id="rsvp-form">
         <div class="form-group">
           <label for="rsvp-name">Your Name</label>
-          <input type="text" id="rsvp-name" value="${escapeHtml(defaultName)}" readonly style="background: #e2e8f0; cursor: not-allowed;" required>
+          <input type="text" id="rsvp-name" value="${escapeHtml(currentUser.name)}" readonly style="background: #e2e8f0; cursor: not-allowed;" required>
         </div>
 
         <div class="rsvp-controls">
@@ -999,86 +1009,18 @@ function renderCalendarTab(state) {
   document.getElementById('copy-event-btn').addEventListener('click', () => handleCopyEvent(state));
 }
 
-function renderSignupTab(state) {
-  const content = document.getElementById('signup-content');
-
-  let html = `
-    <h2>Sign Up / Sign In</h2>
-    <p style="color: #4a5568; margin-bottom: 20px;">Register with your phone number to join this event and access all features.</p>
-    <div class="host-login">
-      <form id="phone-signup-form">
-        <div class="form-group">
-          <label for="signup-name">Your Name</label>
-          <input type="text" id="signup-name" placeholder="Enter your name" required>
-        </div>
-        <div class="form-group">
-          <label for="signup-phone">Phone Number</label>
-          <input type="tel" id="signup-phone" placeholder="(555) 123-4567" required>
-        </div>
-        <button type="submit" class="btn btn-primary">Sign Up / Sign In</button>
-      </form>
-      <p class="organizer-error" id="signup-error"></p>
-    </div>
-
-    <div class="reminder-list" style="margin-top: 24px;">
-      <h3>Registered Users</h3>
-  `;
-
-  if (state.host.users.length === 0) {
-    html += '<p style="color: #718096; font-style: italic;">No users registered yet. Be the first!</p>';
-  } else {
-    html += '<p style="color: #4a5568; margin-bottom: 12px;">These users will receive text reminders:</p>';
-    state.host.users.forEach(user => {
-      const maskPhone = (phone) => {
-        const digits = phone.replace(/\D/g, '');
-        if (digits.length >= 4) {
-          return `***-***-${digits.slice(-4)}`;
-        }
-        return '***-****';
-      };
-      html += `
-        <div class="reminder-item sent">
-          <div style="display: flex; justify-content: space-between;">
-            <div>
-              <strong>${escapeHtml(user.name)}</strong>
-              <div style="font-size: 13px; color: #718096; margin-top: 4px;">${maskPhone(user.phoneNumber)}</div>
-            </div>
-            <div style="font-size: 12px; color: #a0aec0;">
-              Joined ${new Date(user.registeredAt).toLocaleDateString()}
-            </div>
-          </div>
-        </div>
-      `;
-    });
-  }
-
-  html += '</div>';
-  content.innerHTML = html;
-
-  // Attach signup handler
-  document.getElementById('phone-signup-form').addEventListener('submit', handlePhoneSignup);
-}
 
 function renderHostTab(state) {
   const content = document.getElementById('host-content');
 
-  const isLoggedIn = currentUser && state.host.users.some(u => u.phoneNumber === currentUser);
-
-  if (!isLoggedIn) {
-    content.innerHTML = '<p style="text-align: center; padding: 40px; color: #718096;">Please sign up to access host controls.</p>';
-    return;
-  }
-
-  // User is logged in - show full host controls
-  const currentUserData = state.host.users.find(u => u.phoneNumber === currentUser);
+  // Everyone is logged in when accessing events
   let html = `
     <div class="host-login" style="background: linear-gradient(135deg, #d4edda 0%, #c3f0ca 100%); border-color: #28a745;">
       <div style="display: flex; justify-content: space-between; align-items: center;">
         <div>
-          <h3 style="color: #155724; margin-bottom: 4px;">Signed in as ${escapeHtml(currentUserData.name)}</h3>
-          <p style="color: #155724; font-size: 14px; margin: 0;">Phone: ${currentUserData.phoneNumber}</p>
+          <h3 style="color: #155724; margin-bottom: 4px;">Signed in as ${escapeHtml(currentUser.name)}</h3>
+          <p style="color: #155724; font-size: 14px; margin: 0;">Phone: ${currentUser.phoneNumber}</p>
         </div>
-        <button id="sign-out-btn" class="btn btn-secondary" style="margin: 0;">Sign Out</button>
       </div>
     </div>
   `;
@@ -1258,11 +1200,6 @@ function renderHostTab(state) {
   content.innerHTML = html;
 
   // Attach event listeners
-  const signOutBtn = document.getElementById('sign-out-btn');
-  if (signOutBtn) {
-    signOutBtn.addEventListener('click', handleSignOut);
-  }
-
   const addOptionForm = document.getElementById('add-option-form');
   if (addOptionForm) {
     addOptionForm.addEventListener('submit', handleAddOption);
@@ -1420,12 +1357,13 @@ function handleResetDemo() {
   }
 }
 
-function handlePhoneSignup(e) {
+
+function handleGlobalSignup(e) {
   e.preventDefault();
 
-  const name = document.getElementById('signup-name').value.trim();
-  const phone = document.getElementById('signup-phone').value.trim();
-  const errorDiv = document.getElementById('signup-error');
+  const name = document.getElementById('global-signup-name').value.trim();
+  const phone = document.getElementById('global-signup-phone').value.trim();
+  const errorDiv = document.getElementById('global-signup-error');
 
   if (!name || !phone) {
     errorDiv.textContent = 'Please enter both name and phone number';
@@ -1445,39 +1383,37 @@ function handlePhoneSignup(e) {
     return;
   }
 
-  const state = loadState();
-
-  // Check if user exists
-  const existingUser = state.host.users.find(u => u.phoneNumber === phone);
+  // Check if user exists globally
+  const globalUsers = getGlobalUsers();
+  let existingUser = globalUsers.find(u => u.phoneNumber === phone);
 
   if (existingUser) {
     // Sign in existing user
-    currentUser = phone;
-    errorDiv.textContent = '';
-    render();
+    setCurrentUser(existingUser);
   } else {
-    // Register new user
-    state.host.users.push({
+    // Register new user globally
+    const newUser = {
       phoneNumber: phone,
       name: name,
       registeredAt: Date.now()
-    });
-
-    saveState(state);
-    currentUser = phone;
-    render();
+    };
+    globalUsers.push(newUser);
+    saveGlobalUsers(globalUsers);
+    setCurrentUser(newUser);
   }
+
+  render();
 }
 
-function handleSignOut() {
-  currentUser = null;
-  currentTab = 'event';
+function handleGlobalSignOut() {
+  setCurrentUser(null);
+  currentEventId = null;
+  localStorage.removeItem(CURRENT_EVENT_KEY);
   render();
 }
 
 function handleCreateEvent() {
   const newEventId = createNewEvent();
-  currentUser = null;
   currentTab = 'event';
   render();
 }
@@ -1493,7 +1429,6 @@ function handleJoinEvent(e) {
   }
 
   if (joinEvent(eventId)) {
-    currentUser = null;
     currentTab = 'event';
     render();
   } else {
@@ -1503,7 +1438,6 @@ function handleJoinEvent(e) {
 
 function handleLeaveEvent() {
   currentEventId = null;
-  currentUser = null;
   localStorage.removeItem(CURRENT_EVENT_KEY);
   currentTab = 'event';
   render();
@@ -1753,6 +1687,9 @@ function escapeHtml(text) {
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
+  // Load current user from localStorage
+  currentUser = getCurrentUser();
+
   // Load current event ID from localStorage
   currentEventId = getCurrentEventId();
 
