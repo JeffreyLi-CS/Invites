@@ -1,15 +1,31 @@
 // Constants
-const STATE_KEY = 'invites_state_v1';
 const ORGANIZER_PASSWORD = 'admin';
+const CURRENT_EVENT_KEY = 'invites_current_event_id';
 
 // Global state
 let currentTab = 'event';
 let currentUser = null; // phone number of logged in user
-let isHost = false; // whether current user is a host
+let currentEventId = null; // current event ID
+
+// Utility function to generate random event ID
+function generateEventId() {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let id = '';
+  for (let i = 0; i < 6; i++) {
+    id += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return id;
+}
+
+// Get state key for specific event
+function getStateKey(eventId) {
+  return `invites_event_${eventId}`;
+}
 
 // State management
-function seedState() {
+function seedState(eventId) {
   return {
+    eventId: eventId,
     event: {
       title: 'Invites+',
       description: 'Vote on the time and place. After it locks, confirm if you\'re going.',
@@ -25,8 +41,6 @@ function seedState() {
     },
     host: {
       pass: 'admin',
-      inviteCode: 'HOST123', // Code needed to become a host
-      hosts: [], // Array of phone numbers with host access
       users: [], // [{ phoneNumber, name, registeredAt }]
       reminders: []
     },
@@ -44,6 +58,11 @@ function seedState() {
 }
 
 function migrateState(state) {
+  // Ensure eventId exists
+  if (!state.eventId) {
+    state.eventId = currentEventId || generateEventId();
+  }
+
   // Ensure event has new fields
   if (!state.event.timezone) {
     state.event.timezone = 'America/Chicago';
@@ -59,17 +78,9 @@ function migrateState(state) {
   if (!state.host) {
     state.host = {
       pass: 'admin',
-      inviteCode: 'HOST123',
-      hosts: [],
       users: [],
       reminders: []
     };
-  }
-  if (!state.host.inviteCode) {
-    state.host.inviteCode = 'HOST123';
-  }
-  if (!state.host.hosts) {
-    state.host.hosts = [];
   }
   if (!state.host.users) {
     state.host.users = [];
@@ -123,8 +134,11 @@ function migrateState(state) {
 }
 
 function loadState() {
+  if (!currentEventId) {
+    return null;
+  }
   try {
-    const stored = localStorage.getItem(STATE_KEY);
+    const stored = localStorage.getItem(getStateKey(currentEventId));
     if (stored) {
       const state = JSON.parse(stored);
       return migrateState(state);
@@ -132,15 +146,46 @@ function loadState() {
   } catch (e) {
     console.error('Failed to load state:', e);
   }
-  return seedState();
+  return seedState(currentEventId);
 }
 
 function saveState(state) {
+  if (!state || !state.eventId) {
+    console.error('Cannot save state without eventId');
+    return;
+  }
   try {
-    localStorage.setItem(STATE_KEY, JSON.stringify(state));
+    localStorage.setItem(getStateKey(state.eventId), JSON.stringify(state));
   } catch (e) {
     console.error('Failed to save state:', e);
   }
+}
+
+function getCurrentEventId() {
+  return localStorage.getItem(CURRENT_EVENT_KEY);
+}
+
+function setCurrentEventId(eventId) {
+  localStorage.setItem(CURRENT_EVENT_KEY, eventId);
+  currentEventId = eventId;
+}
+
+function createNewEvent() {
+  const newEventId = generateEventId();
+  const newState = seedState(newEventId);
+  saveState(newState);
+  setCurrentEventId(newEventId);
+  return newEventId;
+}
+
+function joinEvent(eventId) {
+  const upperEventId = eventId.toUpperCase();
+  const stored = localStorage.getItem(getStateKey(upperEventId));
+  if (stored) {
+    setCurrentEventId(upperEventId);
+    return true;
+  }
+  return false;
 }
 
 // Utility functions
@@ -205,12 +250,14 @@ function computeWinners(state) {
 // Tab management
 function setActiveTab(tabId) {
   const state = loadState();
+  if (!state) {
+    return;
+  }
   const isLoggedIn = currentUser && state.host.users.some(u => u.phoneNumber === currentUser);
-  const userIsHost = isLoggedIn && state.host.hosts.includes(currentUser);
 
-  // Redirect to event if trying to access host tab when not a host
-  if (tabId === 'host' && !userIsHost) {
-    tabId = 'event';
+  // Redirect to event if trying to access host tab when not logged in
+  if (tabId === 'host' && !isLoggedIn) {
+    tabId = 'signup';
   }
 
   // Redirect to event if trying to access signup tab when logged in
@@ -317,7 +364,16 @@ function downloadTextFile(filename, content, mimeType = 'text/plain') {
 
 // Rendering
 function render() {
+  if (!currentEventId) {
+    renderEventSelection();
+    return;
+  }
+
   const state = loadState();
+  if (!state) {
+    renderEventSelection();
+    return;
+  }
 
   // Process scheduled reminders
   processScheduledReminders(state);
@@ -342,10 +398,53 @@ function render() {
   }
 }
 
+function renderEventSelection() {
+  const container = document.querySelector('.container');
+  container.innerHTML = `
+    <header style="background: rgba(255, 255, 255, 0.98); border-radius: 16px; padding: 40px 32px; margin-bottom: 24px; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12); text-align: center;">
+      <h1 style="font-size: 40px; margin-bottom: 12px; color: #1a202c; font-weight: 800; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; letter-spacing: -0.5px;">Invites+</h1>
+      <p style="color: #4a5568; margin-bottom: 0; font-size: 16px; line-height: 1.7;">Create or join an event to get started</p>
+    </header>
+
+    <div class="section" style="text-align: center;">
+      <h2 style="margin-bottom: 24px;">Get Started</h2>
+
+      <div style="margin-bottom: 32px;">
+        <h3 style="font-size: 18px; margin-bottom: 16px; color: #2d3748;">Create New Event</h3>
+        <p style="color: #718096; margin-bottom: 16px;">Start a new event and share the code with your friends</p>
+        <button id="create-event-btn" class="btn btn-primary" style="font-size: 16px; padding: 16px 32px;">
+          ✨ Generate Event ID
+        </button>
+      </div>
+
+      <div style="border-top: 2px solid #e2e8f0; padding-top: 32px;">
+        <h3 style="font-size: 18px; margin-bottom: 16px; color: #2d3748;">Join Existing Event</h3>
+        <p style="color: #718096; margin-bottom: 16px;">Enter an event code to join</p>
+        <form id="join-event-form" style="max-width: 400px; margin: 0 auto;">
+          <div class="form-group">
+            <input type="text" id="join-event-id" placeholder="Enter Event ID (e.g., ABC123)" required style="text-align: center; font-size: 18px; letter-spacing: 2px; text-transform: uppercase; font-weight: 600;">
+          </div>
+          <button type="submit" class="btn btn-success" style="width: 100%; font-size: 16px; padding: 16px;">
+            Join Event
+          </button>
+          <div id="join-error" class="organizer-error" style="margin-top: 12px;"></div>
+        </form>
+      </div>
+    </div>
+
+    <footer class="demo-tip">
+      <p><strong>💡 How it works:</strong> Create a new event to get a unique ID • Share the ID with participants • Everyone can help organize the event together</p>
+    </footer>
+  `;
+
+  // Attach event listeners
+  document.getElementById('create-event-btn').addEventListener('click', handleCreateEvent);
+  document.getElementById('join-event-form').addEventListener('submit', handleJoinEvent);
+}
+
 function renderTabNav(state) {
   const nav = document.getElementById('tab-nav');
   const isLoggedIn = currentUser && state.host.users.some(u => u.phoneNumber === currentUser);
-  isHost = isLoggedIn && state.host.hosts.includes(currentUser);
 
   let tabs = [
     { id: 'event', label: 'Event' },
@@ -353,11 +452,9 @@ function renderTabNav(state) {
     { id: 'calendar', label: 'Calendar' }
   ];
 
-  if (isHost) {
+  if (isLoggedIn) {
     tabs.push({ id: 'host', label: 'Host' });
-  }
-
-  if (!isLoggedIn) {
+  } else {
     tabs.push({ id: 'signup', label: 'Signup' });
   }
 
@@ -389,11 +486,25 @@ function renderHeader(state) {
   const header = document.getElementById('header');
 
   const html = `
-    <h1>${escapeHtml(state.event.title)}</h1>
-    <p>${escapeHtml(state.event.description)}</p>
+    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px;">
+      <div style="flex: 1;">
+        <h1>${escapeHtml(state.event.title)}</h1>
+        <p style="margin-bottom: 0;">${escapeHtml(state.event.description)}</p>
+      </div>
+      <div style="text-align: right; margin-left: 20px;">
+        <div style="background: linear-gradient(135deg, #e8edff 0%, #f0f4ff 100%); border: 2px solid #667eea; border-radius: 8px; padding: 12px 16px; margin-bottom: 8px;">
+          <div style="font-size: 11px; color: #667eea; font-weight: 600; margin-bottom: 4px;">EVENT ID</div>
+          <div style="font-size: 20px; font-weight: 700; color: #667eea; letter-spacing: 2px; font-family: monospace;">${state.eventId}</div>
+        </div>
+        <button id="leave-event-btn" class="btn btn-secondary" style="font-size: 13px; padding: 8px 16px; margin: 0; width: 100%;">Switch Event</button>
+      </div>
+    </div>
   `;
 
   header.innerHTML = html;
+
+  // Attach leave event listener
+  document.getElementById('leave-event-btn').addEventListener('click', handleLeaveEvent);
 }
 
 function renderLockedPlan(state) {
@@ -431,50 +542,47 @@ function renderSuggestionSection(state) {
   }
 
   const isLoggedIn = currentUser && state.host.users.some(u => u.phoneNumber === currentUser);
-  const userIsHost = isLoggedIn && state.host.hosts.includes(currentUser);
   const currentUserData = isLoggedIn ? state.host.users.find(u => u.phoneNumber === currentUser) : null;
 
-  // Non-hosts can suggest times and locations
-  if (!userIsHost) {
-    let html = `
-      <div class="section">
-        <h2>Suggest Times & Locations</h2>
-        <p style="color: #4a5568; margin-bottom: 20px;">Suggest options for the group. Hosts will review and approve them for voting.</p>
-        <form id="suggestion-form">
-          <div class="form-group">
-            <label for="suggester-name">Your Name</label>
-    `;
+  // Anyone can suggest times and locations (non-logged-in or logged-in users)
+  let html = `
+    <div class="section">
+      <h2>Suggest Times & Locations</h2>
+      <p style="color: #4a5568; margin-bottom: 20px;">Suggest options for the group. All participants can review and approve them for voting.</p>
+      <form id="suggestion-form">
+        <div class="form-group">
+          <label for="suggester-name">Your Name</label>
+  `;
 
-    if (isLoggedIn) {
-      html += `<input type="text" id="suggester-name" value="${escapeHtml(currentUserData.name)}" readonly style="background: #e2e8f0; cursor: not-allowed;" required>`;
-    } else {
-      html += `<input type="text" id="suggester-name" placeholder="Enter your name" required>`;
-    }
-
-    html += `
-          </div>
-          <div class="form-group">
-            <label for="suggestion-type">Suggestion Type</label>
-            <select id="suggestion-type" style="width: 100%; padding: 14px 16px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 15px; background: #fafbfc;">
-              <option value="time">Time</option>
-              <option value="location">Location</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label for="suggestion-value">Suggestion</label>
-            <input type="text" id="suggestion-value" placeholder="e.g., 'Sat 7:00 PM' or 'Torchy's Tacos'" required>
-          </div>
-          <button type="submit" class="btn btn-primary">Submit Suggestion</button>
-          <div id="suggestion-message"></div>
-        </form>
-      </div>
-    `;
-
-    section.innerHTML = html;
-
-    // Attach form handler
-    document.getElementById('suggestion-form').addEventListener('submit', handleSuggestionSubmit);
+  if (isLoggedIn) {
+    html += `<input type="text" id="suggester-name" value="${escapeHtml(currentUserData.name)}" readonly style="background: #e2e8f0; cursor: not-allowed;" required>`;
+  } else {
+    html += `<input type="text" id="suggester-name" placeholder="Enter your name" required>`;
   }
+
+  html += `
+        </div>
+        <div class="form-group">
+          <label for="suggestion-type">Suggestion Type</label>
+          <select id="suggestion-type" style="width: 100%; padding: 14px 16px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 15px; background: #fafbfc;">
+            <option value="time">Time</option>
+            <option value="location">Location</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="suggestion-value">Suggestion</label>
+          <input type="text" id="suggestion-value" placeholder="e.g., 'Sat 7:00 PM' or 'Torchy's Tacos'" required>
+        </div>
+        <button type="submit" class="btn btn-primary">Submit Suggestion</button>
+        <div id="suggestion-message"></div>
+      </form>
+    </div>
+  `;
+
+  section.innerHTML = html;
+
+  // Attach form handler
+  document.getElementById('suggestion-form').addEventListener('submit', handleSuggestionSubmit);
 }
 
 function renderVotingSection(state) {
@@ -814,7 +922,7 @@ function renderSignupTab(state) {
 
   let html = `
     <h2>Sign Up / Sign In</h2>
-    <p style="color: #4a5568; margin-bottom: 20px;">Register with your phone number to join the event. Enter the host invite code to access host controls.</p>
+    <p style="color: #4a5568; margin-bottom: 20px;">Register with your phone number to join this event and access all features.</p>
     <div class="host-login">
       <form id="phone-signup-form">
         <div class="form-group">
@@ -824,11 +932,6 @@ function renderSignupTab(state) {
         <div class="form-group">
           <label for="signup-phone">Phone Number</label>
           <input type="tel" id="signup-phone" placeholder="(555) 123-4567" required>
-        </div>
-        <div class="form-group">
-          <label for="signup-invite-code">Host Invite Code (Optional)</label>
-          <input type="text" id="signup-invite-code" placeholder="Enter code to become a host">
-          <p style="font-size: 13px; color: #718096; margin-top: 6px;">Leave blank to join as a participant</p>
         </div>
         <button type="submit" class="btn btn-primary">Sign Up / Sign In</button>
       </form>
@@ -877,10 +980,10 @@ function renderSignupTab(state) {
 function renderHostTab(state) {
   const content = document.getElementById('host-content');
 
-  const userIsHost = currentUser && state.host.hosts.includes(currentUser);
+  const isLoggedIn = currentUser && state.host.users.some(u => u.phoneNumber === currentUser);
 
-  if (!userIsHost) {
-    content.innerHTML = '<p style="text-align: center; padding: 40px; color: #718096;">You need a host invite code to access these controls. Sign up with a valid code in the Signup tab.</p>';
+  if (!isLoggedIn) {
+    content.innerHTML = '<p style="text-align: center; padding: 40px; color: #718096;">Please sign up to access host controls.</p>';
     return;
   }
 
@@ -894,17 +997,6 @@ function renderHostTab(state) {
           <p style="color: #155724; font-size: 14px; margin: 0;">Phone: ${currentUserData.phoneNumber}</p>
         </div>
         <button id="sign-out-btn" class="btn btn-secondary" style="margin: 0;">Sign Out</button>
-      </div>
-    </div>
-
-    <div class="reminder-form">
-      <h3>Host Invite Code</h3>
-      <p style="color: #4a5568; margin-bottom: 16px;">Share this code with others to grant them host access.</p>
-      <div style="display: flex; gap: 12px; align-items: center;">
-        <div style="flex: 1; background: linear-gradient(135deg, #e8edff 0%, #f0f4ff 100%); border: 2px solid #667eea; border-radius: 8px; padding: 16px; text-align: center;">
-          <div style="font-size: 24px; font-weight: 700; color: #667eea; letter-spacing: 2px; font-family: monospace;">${state.host.inviteCode}</div>
-        </div>
-        <button id="copy-invite-btn" class="btn btn-primary" style="margin: 0;">Copy Code</button>
       </div>
     </div>
   `;
@@ -1089,18 +1181,6 @@ function renderHostTab(state) {
     signOutBtn.addEventListener('click', handleSignOut);
   }
 
-  const copyInviteBtn = document.getElementById('copy-invite-btn');
-  if (copyInviteBtn) {
-    copyInviteBtn.addEventListener('click', () => {
-      navigator.clipboard.writeText(state.host.inviteCode).then(() => {
-        copyInviteBtn.textContent = '✓ Copied!';
-        setTimeout(() => {
-          copyInviteBtn.textContent = 'Copy Code';
-        }, 2000);
-      });
-    });
-  }
-
   const addOptionForm = document.getElementById('add-option-form');
   if (addOptionForm) {
     addOptionForm.addEventListener('submit', handleAddOption);
@@ -1250,11 +1330,10 @@ function handleLockPlan() {
 }
 
 function handleResetDemo() {
-  if (confirm('Are you sure you want to reset? All data will be cleared.')) {
-    const freshState = seedState();
+  if (confirm('Are you sure you want to reset this event? All data will be cleared.')) {
+    const freshState = seedState(currentEventId);
     saveState(freshState);
     currentUser = null;
-    isHost = false;
     render();
   }
 }
@@ -1264,7 +1343,6 @@ function handlePhoneSignup(e) {
 
   const name = document.getElementById('signup-name').value.trim();
   const phone = document.getElementById('signup-phone').value.trim();
-  const inviteCode = document.getElementById('signup-invite-code').value.trim();
   const errorDiv = document.getElementById('signup-error');
 
   if (!name || !phone) {
@@ -1293,15 +1371,6 @@ function handlePhoneSignup(e) {
   if (existingUser) {
     // Sign in existing user
     currentUser = phone;
-
-    // Check if invite code was provided and is correct
-    if (inviteCode && inviteCode === state.host.inviteCode) {
-      if (!state.host.hosts.includes(phone)) {
-        state.host.hosts.push(phone);
-        saveState(state);
-      }
-    }
-
     errorDiv.textContent = '';
     render();
   } else {
@@ -1312,11 +1381,6 @@ function handlePhoneSignup(e) {
       registeredAt: Date.now()
     });
 
-    // Check if invite code was provided and is correct
-    if (inviteCode && inviteCode === state.host.inviteCode) {
-      state.host.hosts.push(phone);
-    }
-
     saveState(state);
     currentUser = phone;
     render();
@@ -1325,7 +1389,40 @@ function handlePhoneSignup(e) {
 
 function handleSignOut() {
   currentUser = null;
-  isHost = false;
+  currentTab = 'event';
+  render();
+}
+
+function handleCreateEvent() {
+  const newEventId = createNewEvent();
+  currentUser = null;
+  currentTab = 'event';
+  render();
+}
+
+function handleJoinEvent(e) {
+  e.preventDefault();
+  const eventId = document.getElementById('join-event-id').value.trim().toUpperCase();
+  const errorDiv = document.getElementById('join-error');
+
+  if (!eventId) {
+    errorDiv.textContent = 'Please enter an event ID';
+    return;
+  }
+
+  if (joinEvent(eventId)) {
+    currentUser = null;
+    currentTab = 'event';
+    render();
+  } else {
+    errorDiv.textContent = 'Event not found. Please check the ID and try again.';
+  }
+}
+
+function handleLeaveEvent() {
+  currentEventId = null;
+  currentUser = null;
+  localStorage.removeItem(CURRENT_EVENT_KEY);
   currentTab = 'event';
   render();
 }
@@ -1574,14 +1671,19 @@ function escapeHtml(text) {
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
+  // Load current event ID from localStorage
+  currentEventId = getCurrentEventId();
+
   // Initial render
   render();
 
   // Start reminder check interval (every 30 seconds)
   setInterval(() => {
-    const state = loadState();
-    if (processScheduledReminders(state)) {
-      render();
+    if (currentEventId) {
+      const state = loadState();
+      if (state && processScheduledReminders(state)) {
+        render();
+      }
     }
   }, 30000);
 });
