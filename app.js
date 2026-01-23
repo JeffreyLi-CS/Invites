@@ -10,7 +10,7 @@ let currentUser = null; // phone number of logged in user
 function seedState() {
   return {
     event: {
-      title: 'Dinner Plan',
+      title: 'Invites+',
       description: 'Vote on the time and place. After it locks, confirm if you\'re going.',
       timezone: 'America/Chicago',
       startAtISO: null,
@@ -726,14 +726,46 @@ function renderCalendarTab(state) {
 
   const timeLabel = state.options.times.find(t => t.id === state.organizer.lockedTimeId)?.label || '';
   const locationLabel = state.options.locations.find(l => l.id === state.organizer.lockedLocationId)?.label || '';
+  const lockedDate = new Date(state.organizer.lockedAt);
+
+  // Calculate RSVP stats
+  const rsvpEntries = Object.entries(state.rsvps);
+  const goingCount = rsvpEntries.filter(([_, rsvp]) => rsvp.status === 'going').length;
+  const notGoingCount = rsvpEntries.filter(([_, rsvp]) => rsvp.status === 'notGoing').length;
+  const totalResponses = goingCount + notGoingCount;
 
   let html = `
     <div class="calendar-summary">
-      <h3>${escapeHtml(state.event.title)}</h3>
-      <div class="calendar-detail"><strong>Time:</strong> ${escapeHtml(timeLabel)}</div>
-      <div class="calendar-detail"><strong>Location:</strong> ${escapeHtml(locationLabel)}</div>
+      <h3 style="font-size: 28px; margin-bottom: 8px;">${escapeHtml(state.event.title)}</h3>
+      <p style="color: #718096; margin-bottom: 24px;">${escapeHtml(state.event.description)}</p>
+
+      <div style="display: grid; gap: 16px; margin-bottom: 24px;">
+        <div style="background: linear-gradient(135deg, #e6f7ff 0%, #d1f0ff 100%); border-left: 4px solid #1890ff; padding: 16px; border-radius: 8px;">
+          <div style="font-size: 13px; color: #0050b3; font-weight: 600; margin-bottom: 6px;">🕒 TIME</div>
+          <div style="font-size: 18px; color: #002766; font-weight: 500;">${escapeHtml(timeLabel)}</div>
+        </div>
+
+        <div style="background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%); border-left: 4px solid #0ea5e9; padding: 16px; border-radius: 8px;">
+          <div style="font-size: 13px; color: #075985; font-weight: 600; margin-bottom: 6px;">📍 LOCATION</div>
+          <div style="font-size: 18px; color: #0c4a6e; font-weight: 500;">${escapeHtml(locationLabel)}</div>
+        </div>
+
+        <div style="background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%); border-left: 4px solid #22c55e; padding: 16px; border-radius: 8px;">
+          <div style="font-size: 13px; color: #15803d; font-weight: 600; margin-bottom: 6px;">👥 ATTENDANCE</div>
+          <div style="font-size: 18px; color: #14532d; font-weight: 500;">
+            ${goingCount} Going${notGoingCount > 0 ? ` • ${notGoingCount} Not Going` : ''}
+          </div>
+          ${totalResponses === 0 ? '<div style="font-size: 14px; color: #15803d; margin-top: 4px; font-style: italic;">No responses yet</div>' : ''}
+        </div>
+      </div>
+
+      <div style="background: #f8fafc; border: 2px solid #e2e8f0; border-radius: 8px; padding: 16px; margin-bottom: 20px;">
+        <div style="font-size: 13px; color: #64748b; margin-bottom: 8px;">Event locked on</div>
+        <div style="font-size: 15px; color: #1e293b; font-weight: 500;">${lockedDate.toLocaleString()}</div>
+      </div>
+
       <div class="calendar-actions">
-        <button id="copy-event-btn" class="btn btn-primary">Copy Event Details</button>
+        <button id="copy-event-btn" class="btn btn-primary" style="width: 100%; padding: 16px; font-size: 16px;">📋 Copy Event Details</button>
       </div>
     </div>
   `;
