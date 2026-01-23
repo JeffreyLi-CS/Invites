@@ -142,22 +142,6 @@ function migrateState(state) {
     state.suggestions.locations = [];
   }
 
-  // Add default options if empty (for migration from old state)
-  if (state.options.times.length === 0 && state.suggestions.times.length === 0) {
-    state.options.times = [
-      { id: 't1', label: 'Fri 7:00 PM' },
-      { id: 't2', label: 'Sat 1:00 PM' },
-      { id: 't3', label: 'Sun 11:00 AM' }
-    ];
-  }
-  if (state.options.locations.length === 0 && state.suggestions.locations.length === 0) {
-    state.options.locations = [
-      { id: 'l1', label: 'Ramen Tatsu-Ya' },
-      { id: 'l2', label: 'Home Poker Night' },
-      { id: 'l3', label: 'Zilker Picnic' }
-    ];
-  }
-
   // Migrate organizer fields to event if locked
   if (state.locked && state.organizer) {
     if (!state.event.startAtISO && state.organizer.lockedAt) {
