@@ -62,9 +62,10 @@ function getStateKey(eventId) {
 }
 
 // State management
-function seedState(eventId) {
+function seedState(eventId, ownerId = null) {
   return {
     eventId: eventId,
+    ownerId: ownerId, // Phone number of the event creator
     event: {
       title: 'Invites+',
       description: 'Vote on the time and place. After it locks, confirm if you\'re going.',
@@ -100,6 +101,12 @@ function migrateState(state) {
   // Ensure eventId exists
   if (!state.eventId) {
     state.eventId = currentEventId || generateEventId();
+  }
+
+  // Ensure ownerId exists (for backward compatibility)
+  if (!state.ownerId && state.host && state.host.users && state.host.users.length > 0) {
+    // Set first user as owner for old events
+    state.ownerId = state.host.users[0].phoneNumber;
   }
 
   // Ensure event has new fields
@@ -195,7 +202,8 @@ function setCurrentEventId(eventId) {
 
 function createNewEvent() {
   const newEventId = generateEventId();
-  const newState = seedState(newEventId);
+  const ownerId = currentUser ? currentUser.phoneNumber : null;
+  const newState = seedState(newEventId, ownerId);
 
   // Add current user to the event
   if (currentUser) {
@@ -997,7 +1005,31 @@ function renderCalendarTab(state) {
 function renderHostTab(state) {
   const content = document.getElementById('host-content');
 
-  // Everyone is logged in when accessing events
+  // Check if current user is the event owner
+  const isOwner = currentUser && state.ownerId === currentUser.phoneNumber;
+
+  if (!isOwner) {
+    // Show message and option to create own event for non-owners
+    content.innerHTML = `
+      <div style="text-align: center; padding: 60px 40px;">
+        <div style="font-size: 48px; margin-bottom: 24px;">🔒</div>
+        <h3 style="color: #2d3748; margin-bottom: 16px; font-size: 24px;">Host Controls Restricted</h3>
+        <p style="color: #718096; margin-bottom: 12px; font-size: 16px; line-height: 1.6;">Only the event creator can access host controls for this event.</p>
+        <p style="color: #4a5568; margin-bottom: 32px; font-size: 15px; font-weight: 500;">Want to organize your own event?</p>
+        <button id="create-own-event-btn" class="btn btn-primary" style="font-size: 16px; padding: 16px 32px;">
+          ✨ Create Your Own Event
+        </button>
+      </div>
+    `;
+
+    // Attach event listener
+    document.getElementById('create-own-event-btn').addEventListener('click', () => {
+      handleLeaveEvent();
+    });
+    return;
+  }
+
+  // Owner has full access - show all host controls
   let html = `
     <div class="host-login" style="background: linear-gradient(135deg, #d4edda 0%, #c3f0ca 100%); border-color: #28a745;">
       <div style="display: flex; justify-content: space-between; align-items: center;">
