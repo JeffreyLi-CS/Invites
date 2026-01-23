@@ -5,6 +5,7 @@ const ORGANIZER_PASSWORD = 'admin';
 // Global state
 let currentTab = 'event';
 let currentUser = null; // phone number of logged in user
+let isHost = false; // whether current user is a host
 
 // State management
 function seedState() {
@@ -24,6 +25,8 @@ function seedState() {
     },
     host: {
       pass: 'admin',
+      inviteCode: 'HOST123', // Code needed to become a host
+      hosts: [], // Array of phone numbers with host access
       users: [], // [{ phoneNumber, name, registeredAt }]
       reminders: []
     },
@@ -56,9 +59,17 @@ function migrateState(state) {
   if (!state.host) {
     state.host = {
       pass: 'admin',
+      inviteCode: 'HOST123',
+      hosts: [],
       users: [],
       reminders: []
     };
+  }
+  if (!state.host.inviteCode) {
+    state.host.inviteCode = 'HOST123';
+  }
+  if (!state.host.hosts) {
+    state.host.hosts = [];
   }
   if (!state.host.users) {
     state.host.users = [];
@@ -195,10 +206,11 @@ function computeWinners(state) {
 function setActiveTab(tabId) {
   const state = loadState();
   const isLoggedIn = currentUser && state.host.users.some(u => u.phoneNumber === currentUser);
+  const userIsHost = isLoggedIn && state.host.hosts.includes(currentUser);
 
-  // Redirect to signup if trying to access host tab when not logged in
-  if (tabId === 'host' && !isLoggedIn) {
-    tabId = 'signup';
+  // Redirect to event if trying to access host tab when not a host
+  if (tabId === 'host' && !userIsHost) {
+    tabId = 'event';
   }
 
   // Redirect to event if trying to access signup tab when logged in
@@ -333,6 +345,7 @@ function render() {
 function renderTabNav(state) {
   const nav = document.getElementById('tab-nav');
   const isLoggedIn = currentUser && state.host.users.some(u => u.phoneNumber === currentUser);
+  isHost = isLoggedIn && state.host.hosts.includes(currentUser);
 
   let tabs = [
     { id: 'event', label: 'Event' },
@@ -340,9 +353,11 @@ function renderTabNav(state) {
     { id: 'calendar', label: 'Calendar' }
   ];
 
-  if (isLoggedIn) {
+  if (isHost) {
     tabs.push({ id: 'host', label: 'Host' });
-  } else {
+  }
+
+  if (!isLoggedIn) {
     tabs.push({ id: 'signup', label: 'Signup' });
   }
 
@@ -374,10 +389,8 @@ function renderHeader(state) {
   const header = document.getElementById('header');
 
   const html = `
-    <div class="section">
-      <h1>${escapeHtml(state.event.title)}</h1>
-      <p>${escapeHtml(state.event.description)}</p>
-    </div>
+    <h1>${escapeHtml(state.event.title)}</h1>
+    <p>${escapeHtml(state.event.description)}</p>
   `;
 
   header.innerHTML = html;
@@ -418,31 +431,43 @@ function renderSuggestionSection(state) {
   }
 
   const isLoggedIn = currentUser && state.host.users.some(u => u.phoneNumber === currentUser);
+  const userIsHost = isLoggedIn && state.host.hosts.includes(currentUser);
+  const currentUserData = isLoggedIn ? state.host.users.find(u => u.phoneNumber === currentUser) : null;
 
   // Non-hosts can suggest times and locations
-  if (!isLoggedIn) {
+  if (!userIsHost) {
     let html = `
-      <h2>Suggest Times & Locations</h2>
-      <p style="color: #4a5568; margin-bottom: 20px;">Suggest options for the group. Hosts will review and approve them for voting.</p>
-      <form id="suggestion-form">
-        <div class="form-group">
-          <label for="suggester-name">Your Name</label>
-          <input type="text" id="suggester-name" placeholder="Enter your name" required>
-        </div>
-        <div class="form-group">
-          <label for="suggestion-type">Suggestion Type</label>
-          <select id="suggestion-type" style="width: 100%; padding: 14px 16px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 15px; background: #fafbfc;">
-            <option value="time">Time</option>
-            <option value="location">Location</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label for="suggestion-value">Suggestion</label>
-          <input type="text" id="suggestion-value" placeholder="e.g., 'Sat 7:00 PM' or 'Torchy's Tacos'" required>
-        </div>
-        <button type="submit" class="btn btn-primary">Submit Suggestion</button>
-        <div id="suggestion-message"></div>
-      </form>
+      <div class="section">
+        <h2>Suggest Times & Locations</h2>
+        <p style="color: #4a5568; margin-bottom: 20px;">Suggest options for the group. Hosts will review and approve them for voting.</p>
+        <form id="suggestion-form">
+          <div class="form-group">
+            <label for="suggester-name">Your Name</label>
+    `;
+
+    if (isLoggedIn) {
+      html += `<input type="text" id="suggester-name" value="${escapeHtml(currentUserData.name)}" readonly style="background: #e2e8f0; cursor: not-allowed;" required>`;
+    } else {
+      html += `<input type="text" id="suggester-name" placeholder="Enter your name" required>`;
+    }
+
+    html += `
+          </div>
+          <div class="form-group">
+            <label for="suggestion-type">Suggestion Type</label>
+            <select id="suggestion-type" style="width: 100%; padding: 14px 16px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 15px; background: #fafbfc;">
+              <option value="time">Time</option>
+              <option value="location">Location</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="suggestion-value">Suggestion</label>
+            <input type="text" id="suggestion-value" placeholder="e.g., 'Sat 7:00 PM' or 'Torchy's Tacos'" required>
+          </div>
+          <button type="submit" class="btn btn-primary">Submit Suggestion</button>
+          <div id="suggestion-message"></div>
+        </form>
+      </div>
     `;
 
     section.innerHTML = html;
@@ -466,11 +491,13 @@ function renderVotingSection(state) {
 
   if (!isLoggedIn) {
     section.innerHTML = `
-      <h2>Cast Your Vote</h2>
-      <div style="text-align: center; padding: 40px 20px; background: linear-gradient(135deg, #fff5f5 0%, #ffe5e5 100%); border-radius: 12px; border: 2px solid #fc8181;">
-        <p style="color: #742a2a; font-size: 16px; font-weight: 500; margin-bottom: 16px;">Please sign up to vote</p>
-        <p style="color: #742a2a; margin-bottom: 20px;">You need to register with your phone number before you can cast your vote.</p>
-        <button class="btn btn-primary" onclick="setActiveTab('signup')">Go to Signup</button>
+      <div class="section">
+        <h2>Cast Your Vote</h2>
+        <div style="text-align: center; padding: 40px 20px; background: linear-gradient(135deg, #fff5f5 0%, #ffe5e5 100%); border-radius: 12px; border: 2px solid #fc8181;">
+          <p style="color: #742a2a; font-size: 16px; font-weight: 500; margin-bottom: 16px;">Please sign up to vote</p>
+          <p style="color: #742a2a; margin-bottom: 20px;">You need to register with your phone number before you can cast your vote.</p>
+          <button class="btn btn-primary" onclick="setActiveTab('signup')">Go to Signup</button>
+        </div>
       </div>
     `;
     return;
@@ -479,16 +506,17 @@ function renderVotingSection(state) {
   const defaultName = currentUserData.name;
 
   let html = `
-    <h2>Cast Your Vote</h2>
-    <form id="vote-form">
-      <div class="form-group">
-        <label for="voter-name">Your Name</label>
-        <input type="text" id="voter-name" value="${escapeHtml(defaultName)}" readonly style="background: #e2e8f0; cursor: not-allowed;" required>
-      </div>
+    <div class="section">
+      <h2>Cast Your Vote</h2>
+      <form id="vote-form">
+        <div class="form-group">
+          <label for="voter-name">Your Name</label>
+          <input type="text" id="voter-name" value="${escapeHtml(defaultName)}" readonly style="background: #e2e8f0; cursor: not-allowed;" required>
+        </div>
 
-      <div class="form-group">
-        <label>Select a Time</label>
-        <div class="radio-group">
+        <div class="form-group">
+          <label>Select a Time</label>
+          <div class="radio-group">
   `;
 
   state.options.times.forEach(time => {
@@ -522,9 +550,10 @@ function renderVotingSection(state) {
         </div>
       </div>
 
-      <button type="submit" class="btn btn-primary">Submit Vote</button>
-      <div id="vote-message"></div>
-    </form>
+        <button type="submit" class="btn btn-primary">Submit Vote</button>
+        <div id="vote-message"></div>
+      </form>
+    </div>
   `;
 
   section.innerHTML = html;
@@ -602,15 +631,16 @@ function renderRSVPSection(state) {
 
   if (!isLoggedIn) {
     let html = `
-      <h2>RSVP</h2>
-      <div style="text-align: center; padding: 40px 20px; background: linear-gradient(135deg, #fff5f5 0%, #ffe5e5 100%); border-radius: 12px; border: 2px solid #fc8181;">
-        <p style="color: #742a2a; font-size: 16px; font-weight: 500; margin-bottom: 16px;">Please sign up to RSVP</p>
-        <p style="color: #742a2a; margin-bottom: 20px;">You need to register with your phone number before you can confirm your attendance.</p>
-        <button class="btn btn-primary" onclick="setActiveTab('signup')">Go to Signup</button>
-      </div>
+      <div class="section">
+        <h2>RSVP</h2>
+        <div style="text-align: center; padding: 40px 20px; background: linear-gradient(135deg, #fff5f5 0%, #ffe5e5 100%); border-radius: 12px; border: 2px solid #fc8181;">
+          <p style="color: #742a2a; font-size: 16px; font-weight: 500; margin-bottom: 16px;">Please sign up to RSVP</p>
+          <p style="color: #742a2a; margin-bottom: 20px;">You need to register with your phone number before you can confirm your attendance.</p>
+          <button class="btn btn-primary" onclick="setActiveTab('signup')">Go to Signup</button>
+        </div>
 
-      <div class="attendee-list">
-        <h4>Attendees</h4>
+        <div class="attendee-list">
+          <h4>Attendees</h4>
     `;
 
     const going = Object.entries(state.rsvps)
@@ -629,7 +659,7 @@ function renderRSVPSection(state) {
       html += '<p style="color: #718096; font-style: italic;">No one has confirmed yet</p>';
     }
 
-    html += '</div>';
+    html += '</div></div>';
     section.innerHTML = html;
     return;
   }
@@ -637,23 +667,24 @@ function renderRSVPSection(state) {
   const defaultName = currentUserData.name;
 
   let html = `
-    <h2>RSVP</h2>
-    <form id="rsvp-form">
-      <div class="form-group">
-        <label for="rsvp-name">Your Name</label>
-        <input type="text" id="rsvp-name" value="${escapeHtml(defaultName)}" readonly style="background: #e2e8f0; cursor: not-allowed;" required>
-      </div>
+    <div class="section">
+      <h2>RSVP</h2>
+      <form id="rsvp-form">
+        <div class="form-group">
+          <label for="rsvp-name">Your Name</label>
+          <input type="text" id="rsvp-name" value="${escapeHtml(defaultName)}" readonly style="background: #e2e8f0; cursor: not-allowed;" required>
+        </div>
 
-      <div class="rsvp-controls">
-        <button type="submit" name="status" value="going" class="btn btn-success">I'm Going</button>
-        <button type="submit" name="status" value="notGoing" class="btn btn-danger">Not Going</button>
-      </div>
+        <div class="rsvp-controls">
+          <button type="submit" name="status" value="going" class="btn btn-success">I'm Going</button>
+          <button type="submit" name="status" value="notGoing" class="btn btn-danger">Not Going</button>
+        </div>
 
-      <div id="rsvp-message"></div>
-    </form>
+        <div id="rsvp-message"></div>
+      </form>
 
-    <div class="attendee-list">
-      <h4>Attendees</h4>
+      <div class="attendee-list">
+        <h4>Attendees</h4>
   `;
 
   const going = Object.entries(state.rsvps)
@@ -672,7 +703,7 @@ function renderRSVPSection(state) {
     html += '<p style="color: #718096; font-style: italic;">No one has confirmed yet</p>';
   }
 
-  html += '</div>';
+  html += '</div></div>';
 
   section.innerHTML = html;
 
@@ -693,23 +724,25 @@ function renderRemindersDisplay(state) {
   }
 
   let html = `
-    <div class="reminders-display">
-      <h3>📱 Text Messages</h3>
+    <div class="section">
+      <div class="reminders-display">
+        <h3>📱 Text Messages</h3>
   `;
 
   sentReminders.forEach(reminder => {
     const createdDate = new Date(reminder.createdAt);
     const recipientCount = state.host.users.length;
     html += `
-      <div class="reminder-display-item">
-        <div class="reminder-display-time">${createdDate.toLocaleString()} • Sent to ${recipientCount} user${recipientCount !== 1 ? 's' : ''}</div>
-        <div class="reminder-display-message">${escapeHtml(reminder.message)}</div>
-      </div>
+        <div class="reminder-display-item">
+          <div class="reminder-display-time">${createdDate.toLocaleString()} • Sent to ${recipientCount} user${recipientCount !== 1 ? 's' : ''}</div>
+          <div class="reminder-display-message">${escapeHtml(reminder.message)}</div>
+        </div>
     `;
   });
 
   html += `
-    <div class="last-updated">Last updated: ${new Date().toLocaleString()}</div>
+        <div class="last-updated">Last updated: ${new Date().toLocaleString()}</div>
+      </div>
     </div>
   `;
 
@@ -781,7 +814,7 @@ function renderSignupTab(state) {
 
   let html = `
     <h2>Sign Up / Sign In</h2>
-    <p style="color: #4a5568; margin-bottom: 20px;">Register with your phone number to become a host and access host controls.</p>
+    <p style="color: #4a5568; margin-bottom: 20px;">Register with your phone number to join the event. Enter the host invite code to access host controls.</p>
     <div class="host-login">
       <form id="phone-signup-form">
         <div class="form-group">
@@ -791,6 +824,11 @@ function renderSignupTab(state) {
         <div class="form-group">
           <label for="signup-phone">Phone Number</label>
           <input type="tel" id="signup-phone" placeholder="(555) 123-4567" required>
+        </div>
+        <div class="form-group">
+          <label for="signup-invite-code">Host Invite Code (Optional)</label>
+          <input type="text" id="signup-invite-code" placeholder="Enter code to become a host">
+          <p style="font-size: 13px; color: #718096; margin-top: 6px;">Leave blank to join as a participant</p>
         </div>
         <button type="submit" class="btn btn-primary">Sign Up / Sign In</button>
       </form>
@@ -839,10 +877,10 @@ function renderSignupTab(state) {
 function renderHostTab(state) {
   const content = document.getElementById('host-content');
 
-  const isLoggedIn = currentUser && state.host.users.some(u => u.phoneNumber === currentUser);
+  const userIsHost = currentUser && state.host.hosts.includes(currentUser);
 
-  if (!isLoggedIn) {
-    content.innerHTML = '<p style="text-align: center; padding: 40px; color: #718096;">Please sign up in the Signup tab to access host controls.</p>';
+  if (!userIsHost) {
+    content.innerHTML = '<p style="text-align: center; padding: 40px; color: #718096;">You need a host invite code to access these controls. Sign up with a valid code in the Signup tab.</p>';
     return;
   }
 
@@ -856,6 +894,17 @@ function renderHostTab(state) {
           <p style="color: #155724; font-size: 14px; margin: 0;">Phone: ${currentUserData.phoneNumber}</p>
         </div>
         <button id="sign-out-btn" class="btn btn-secondary" style="margin: 0;">Sign Out</button>
+      </div>
+    </div>
+
+    <div class="reminder-form">
+      <h3>Host Invite Code</h3>
+      <p style="color: #4a5568; margin-bottom: 16px;">Share this code with others to grant them host access.</p>
+      <div style="display: flex; gap: 12px; align-items: center;">
+        <div style="flex: 1; background: linear-gradient(135deg, #e8edff 0%, #f0f4ff 100%); border: 2px solid #667eea; border-radius: 8px; padding: 16px; text-align: center;">
+          <div style="font-size: 24px; font-weight: 700; color: #667eea; letter-spacing: 2px; font-family: monospace;">${state.host.inviteCode}</div>
+        </div>
+        <button id="copy-invite-btn" class="btn btn-primary" style="margin: 0;">Copy Code</button>
       </div>
     </div>
   `;
@@ -1026,7 +1075,7 @@ function renderHostTab(state) {
           <input type="password" id="organizer-password" placeholder="Organizer password" value="admin">
         </div>
         <button id="lock-btn" class="btn btn-primary" ${state.locked ? 'disabled' : ''}>Lock Plan</button>
-        <button id="reset-btn" class="btn btn-secondary">Reset Demo</button>
+        <button id="reset-btn" class="btn btn-secondary">Reset All</button>
       </div>
       <p class="organizer-error" id="organizer-error"></p>
     </div>
@@ -1038,6 +1087,18 @@ function renderHostTab(state) {
   const signOutBtn = document.getElementById('sign-out-btn');
   if (signOutBtn) {
     signOutBtn.addEventListener('click', handleSignOut);
+  }
+
+  const copyInviteBtn = document.getElementById('copy-invite-btn');
+  if (copyInviteBtn) {
+    copyInviteBtn.addEventListener('click', () => {
+      navigator.clipboard.writeText(state.host.inviteCode).then(() => {
+        copyInviteBtn.textContent = '✓ Copied!';
+        setTimeout(() => {
+          copyInviteBtn.textContent = 'Copy Code';
+        }, 2000);
+      });
+    });
   }
 
   const addOptionForm = document.getElementById('add-option-form');
@@ -1189,10 +1250,11 @@ function handleLockPlan() {
 }
 
 function handleResetDemo() {
-  if (confirm('Are you sure you want to reset the demo? All data will be cleared.')) {
+  if (confirm('Are you sure you want to reset? All data will be cleared.')) {
     const freshState = seedState();
     saveState(freshState);
     currentUser = null;
+    isHost = false;
     render();
   }
 }
@@ -1202,6 +1264,7 @@ function handlePhoneSignup(e) {
 
   const name = document.getElementById('signup-name').value.trim();
   const phone = document.getElementById('signup-phone').value.trim();
+  const inviteCode = document.getElementById('signup-invite-code').value.trim();
   const errorDiv = document.getElementById('signup-error');
 
   if (!name || !phone) {
@@ -1230,6 +1293,15 @@ function handlePhoneSignup(e) {
   if (existingUser) {
     // Sign in existing user
     currentUser = phone;
+
+    // Check if invite code was provided and is correct
+    if (inviteCode && inviteCode === state.host.inviteCode) {
+      if (!state.host.hosts.includes(phone)) {
+        state.host.hosts.push(phone);
+        saveState(state);
+      }
+    }
+
     errorDiv.textContent = '';
     render();
   } else {
@@ -1239,6 +1311,12 @@ function handlePhoneSignup(e) {
       name: name,
       registeredAt: Date.now()
     });
+
+    // Check if invite code was provided and is correct
+    if (inviteCode && inviteCode === state.host.inviteCode) {
+      state.host.hosts.push(phone);
+    }
+
     saveState(state);
     currentUser = phone;
     render();
@@ -1247,6 +1325,7 @@ function handlePhoneSignup(e) {
 
 function handleSignOut() {
   currentUser = null;
+  isHost = false;
   currentTab = 'event';
   render();
 }

@@ -539,6 +539,16 @@ h2, h3 {
   margin-top: 8px;
 }
 
+.demo-tip code {
+  background: rgba(255, 255, 255, 0.25);
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-family: 'Courier New', monospace;
+  font-weight: 700;
+  letter-spacing: 1px;
+  font-size: 13px;
+}
+
 .host-section {
   background: linear-gradient(135deg, #faf5ff 0%, #f3e8ff 100%);
   border: 2px solid #9f7aea;
