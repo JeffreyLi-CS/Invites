@@ -375,6 +375,9 @@ function render() {
     return;
   }
 
+  // Ensure normal HTML structure exists
+  ensureNormalStructure();
+
   // Process scheduled reminders
   processScheduledReminders(state);
 
@@ -395,6 +398,85 @@ function render() {
     renderSignupTab(state);
   } else if (currentTab === 'host') {
     renderHostTab(state);
+  }
+}
+
+function ensureNormalStructure() {
+  const container = document.querySelector('.container');
+
+  // Check if normal structure exists
+  if (!document.getElementById('header')) {
+    // Restore normal HTML structure
+    container.innerHTML = `
+      <header id="header">
+        <!-- Event title and description rendered here -->
+      </header>
+
+      <nav class="tab-nav" id="tab-nav">
+        <!-- Tab buttons rendered dynamically -->
+      </nav>
+
+      <!-- Event Tab -->
+      <div id="tab-event" class="tab-panel active">
+        <section id="locked-plan-section">
+          <!-- Locked plan card rendered here -->
+        </section>
+
+        <section id="voting-section">
+          <!-- Voting form rendered here when not locked -->
+        </section>
+
+        <section id="rsvp-section">
+          <!-- RSVP form rendered here when locked -->
+        </section>
+
+        <section id="reminders-section">
+          <!-- Reminders displayed here -->
+        </section>
+      </div>
+
+      <!-- Results Tab -->
+      <div id="tab-results" class="tab-panel">
+        <section class="section">
+          <h2>Live Results</h2>
+          <div id="results-content">
+            <!-- Tallies rendered here -->
+          </div>
+        </section>
+      </div>
+
+      <!-- Calendar Tab -->
+      <div id="tab-calendar" class="tab-panel">
+        <section class="section">
+          <div id="calendar-content">
+            <!-- Calendar and ICS download rendered here -->
+          </div>
+        </section>
+      </div>
+
+      <!-- Signup Tab -->
+      <div id="tab-signup" class="tab-panel">
+        <section class="section">
+          <div id="signup-content">
+            <!-- Signup form rendered here -->
+          </div>
+        </section>
+      </div>
+
+      <!-- Host Tab -->
+      <div id="tab-host" class="tab-panel">
+        <section class="section host-section">
+          <h2>Host Controls</h2>
+          <div id="host-content">
+            <!-- Host controls rendered here -->
+          </div>
+        </section>
+      </div>
+
+      <footer class="demo-tip">
+        <p><strong>💡 How it works:</strong> Create a new event or join an existing one • Everyone who joins can help organize • Share the Event ID with participants</p>
+      </footer>
+    `;
   }
 }
 
