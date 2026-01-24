@@ -696,11 +696,20 @@ function renderSuggestionSection(state) {
     return;
   }
 
-  // Everyone is logged in when accessing events
+  // Check if current user is the event owner
+  const isOwner = currentUser && state.ownerId === currentUser.phoneNumber;
+
+  // Owners don't need the suggestion form - they can add directly in Host tab
+  if (isOwner) {
+    section.innerHTML = '';
+    return;
+  }
+
+  // Show suggestion form for participants only
   let html = `
     <div class="section">
       <h2>Suggest Times & Locations</h2>
-      <p style="color: #4a5568; margin-bottom: 20px;">Suggest options for the group. All participants can review and approve them for voting.</p>
+      <p style="color: #4a5568; margin-bottom: 20px;">Suggest options for the host to review and approve for voting.</p>
       <form id="suggestion-form">
         <div class="form-group">
           <label for="suggester-name">Your Name</label>
