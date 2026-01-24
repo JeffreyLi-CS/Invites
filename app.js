@@ -465,6 +465,10 @@ function ensureNormalStructure() {
           <!-- Locked plan card rendered here -->
         </section>
 
+        <section id="suggestion-section">
+          <!-- Suggestion form rendered here when not locked -->
+        </section>
+
         <section id="voting-section">
           <!-- Voting form rendered here when not locked -->
         </section>
@@ -684,10 +688,11 @@ function renderLockedPlan(state) {
 }
 
 function renderSuggestionSection(state) {
-  const section = document.getElementById('voting-section');
+  const section = document.getElementById('suggestion-section');
 
   // Only show suggestions if not locked
   if (state.locked) {
+    section.innerHTML = '';
     return;
   }
 
@@ -700,10 +705,6 @@ function renderSuggestionSection(state) {
         <div class="form-group">
           <label for="suggester-name">Your Name</label>
           <input type="text" id="suggester-name" value="${escapeHtml(currentUser.name)}" readonly style="background: #e2e8f0; cursor: not-allowed;" required>
-        </div>
-  `;
-
-  html += `
         </div>
         <div class="form-group">
           <label for="suggestion-type">Suggestion Type</label>
