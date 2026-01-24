@@ -699,43 +699,85 @@ function renderSuggestionSection(state) {
   // Check if current user is the event owner
   const isOwner = currentUser && state.ownerId === currentUser.phoneNumber;
 
-  // Owners don't need the suggestion form - they can add directly in Host tab
   if (isOwner) {
-    section.innerHTML = '';
-    return;
+    // Show direct add form for event creator
+    let html = `
+      <div class="section">
+        <h2>Add Times & Locations</h2>
+        <p style="color: #4a5568; margin-bottom: 20px;">Add options for participants to vote on.</p>
+        <form id="owner-add-option-form">
+          <div class="form-group">
+            <label for="owner-option-type">Option Type</label>
+            <select id="owner-option-type" style="width: 100%; padding: 14px 16px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 15px; background: #fafbfc;">
+              <option value="time">Time</option>
+              <option value="location">Location</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="owner-option-value">Option Value</label>
+            <input type="text" id="owner-option-value" placeholder="e.g., 'Sat 7:00 PM' or 'Torchy's Tacos'" required style="width: 100%; padding: 14px 16px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 15px; background: #fafbfc;">
+          </div>
+          <button type="submit" class="btn btn-primary">Add Option</button>
+          <div id="owner-add-option-message"></div>
+        </form>
+
+        <div style="margin-top: 20px;">
+          <h4 style="font-size: 16px; margin-bottom: 12px;">Current Times (${state.options.times.length})</h4>
+          ${state.options.times.length > 0 ? state.options.times.map(t => `
+            <div class="reminder-item sent" style="display: flex; justify-content: space-between; align-items: center; background: #f7fafc; border: 1px solid #e2e8f0; padding: 12px 16px; border-radius: 8px; margin-bottom: 8px;">
+              <span>${escapeHtml(t.label)}</span>
+              <button class="btn btn-danger" style="padding: 8px 16px; font-size: 13px; margin: 0;" onclick="handleRemoveOption('time', '${t.id}')">Remove</button>
+            </div>
+          `).join('') : '<p style="color: #718096; font-style: italic;">No times added yet</p>'}
+
+          <h4 style="font-size: 16px; margin-top: 16px; margin-bottom: 12px;">Current Locations (${state.options.locations.length})</h4>
+          ${state.options.locations.length > 0 ? state.options.locations.map(l => `
+            <div class="reminder-item sent" style="display: flex; justify-content: space-between; align-items: center; background: #f7fafc; border: 1px solid #e2e8f0; padding: 12px 16px; border-radius: 8px; margin-bottom: 8px;">
+              <span>${escapeHtml(l.label)}</span>
+              <button class="btn btn-danger" style="padding: 8px 16px; font-size: 13px; margin: 0;" onclick="handleRemoveOption('location', '${l.id}')">Remove</button>
+            </div>
+          `).join('') : '<p style="color: #718096; font-style: italic;">No locations added yet</p>'}
+        </div>
+      </div>
+    `;
+
+    section.innerHTML = html;
+
+    // Attach form handler
+    document.getElementById('owner-add-option-form').addEventListener('submit', handleOwnerAddOption);
+  } else {
+    // Show suggestion form for participants only
+    let html = `
+      <div class="section">
+        <h2>Suggest Times & Locations</h2>
+        <p style="color: #4a5568; margin-bottom: 20px;">Suggest options for the host to review and approve for voting.</p>
+        <form id="suggestion-form">
+          <div class="form-group">
+            <label for="suggester-name">Your Name</label>
+            <input type="text" id="suggester-name" value="${escapeHtml(currentUser.name)}" readonly style="background: #e2e8f0; cursor: not-allowed;" required>
+          </div>
+          <div class="form-group">
+            <label for="suggestion-type">Suggestion Type</label>
+            <select id="suggestion-type" style="width: 100%; padding: 14px 16px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 15px; background: #fafbfc;">
+              <option value="time">Time</option>
+              <option value="location">Location</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="suggestion-value">Suggestion</label>
+            <input type="text" id="suggestion-value" placeholder="e.g., 'Sat 7:00 PM' or 'Torchy's Tacos'" required>
+          </div>
+          <button type="submit" class="btn btn-primary">Submit Suggestion</button>
+          <div id="suggestion-message"></div>
+        </form>
+      </div>
+    `;
+
+    section.innerHTML = html;
+
+    // Attach form handler
+    document.getElementById('suggestion-form').addEventListener('submit', handleSuggestionSubmit);
   }
-
-  // Show suggestion form for participants only
-  let html = `
-    <div class="section">
-      <h2>Suggest Times & Locations</h2>
-      <p style="color: #4a5568; margin-bottom: 20px;">Suggest options for the host to review and approve for voting.</p>
-      <form id="suggestion-form">
-        <div class="form-group">
-          <label for="suggester-name">Your Name</label>
-          <input type="text" id="suggester-name" value="${escapeHtml(currentUser.name)}" readonly style="background: #e2e8f0; cursor: not-allowed;" required>
-        </div>
-        <div class="form-group">
-          <label for="suggestion-type">Suggestion Type</label>
-          <select id="suggestion-type" style="width: 100%; padding: 14px 16px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 15px; background: #fafbfc;">
-            <option value="time">Time</option>
-            <option value="location">Location</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label for="suggestion-value">Suggestion</label>
-          <input type="text" id="suggestion-value" placeholder="e.g., 'Sat 7:00 PM' or 'Torchy's Tacos'" required>
-        </div>
-        <button type="submit" class="btn btn-primary">Submit Suggestion</button>
-        <div id="suggestion-message"></div>
-      </form>
-    </div>
-  `;
-
-  section.innerHTML = html;
-
-  // Attach form handler
-  document.getElementById('suggestion-form').addEventListener('submit', handleSuggestionSubmit);
 }
 
 function renderVotingSection(state) {
@@ -1101,47 +1143,6 @@ function renderHostTab(state) {
     html += '</div>';
   }
 
-  // Add times and locations
-  html += `
-    <div class="reminder-form">
-      <h3>Add Times & Locations</h3>
-      <p style="color: #4a5568; margin-bottom: 16px;">Add options for the group to vote on.</p>
-      <form id="add-option-form">
-        <div class="form-group">
-          <label for="option-type">Option Type</label>
-          <select id="option-type" style="width: 100%; padding: 14px 16px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 15px; background: #fafbfc;">
-            <option value="time">Time</option>
-            <option value="location">Location</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label for="option-value">Option Value</label>
-          <input type="text" id="option-value" placeholder="e.g., 'Sat 7:00 PM' or 'Torchy's Tacos'" required style="width: 100%; padding: 14px 16px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 15px; background: #fafbfc;">
-        </div>
-        <button type="submit" class="btn btn-primary">Add Option</button>
-        <div id="add-option-message"></div>
-      </form>
-
-      <div style="margin-top: 20px;">
-        <h4 style="font-size: 16px; margin-bottom: 12px;">Current Times (${state.options.times.length})</h4>
-        ${state.options.times.length > 0 ? state.options.times.map(t => `
-          <div class="reminder-item sent" style="display: flex; justify-content: space-between; align-items: center;">
-            <span>${escapeHtml(t.label)}</span>
-            <button class="btn btn-danger" style="padding: 8px 16px; font-size: 13px; margin: 0;" onclick="handleRemoveOption('time', '${t.id}')">Remove</button>
-          </div>
-        `).join('') : '<p style="color: #718096; font-style: italic;">No times added yet</p>'}
-
-        <h4 style="font-size: 16px; margin-top: 16px; margin-bottom: 12px;">Current Locations (${state.options.locations.length})</h4>
-        ${state.options.locations.length > 0 ? state.options.locations.map(l => `
-          <div class="reminder-item sent" style="display: flex; justify-content: space-between; align-items: center;">
-            <span>${escapeHtml(l.label)}</span>
-            <button class="btn btn-danger" style="padding: 8px 16px; font-size: 13px; margin: 0;" onclick="handleRemoveOption('location', '${l.id}')">Remove</button>
-          </div>
-        `).join('') : '<p style="color: #718096; font-style: italic;">No locations added yet</p>'}
-      </div>
-    </div>
-  `;
-
   // Send Text Reminder
   html += `
     <div class="reminder-form">
@@ -1226,11 +1227,6 @@ function renderHostTab(state) {
   content.innerHTML = html;
 
   // Attach event listeners
-  const addOptionForm = document.getElementById('add-option-form');
-  if (addOptionForm) {
-    addOptionForm.addEventListener('submit', handleAddOption);
-  }
-
   const reminderForm = document.getElementById('reminder-form');
   if (reminderForm) {
     reminderForm.addEventListener('submit', handleCreateReminder);
@@ -1506,6 +1502,42 @@ function handleSuggestionSubmit(e) {
   setTimeout(() => {
     messageDiv.innerHTML = '';
   }, 3000);
+}
+
+function handleOwnerAddOption(e) {
+  e.preventDefault();
+
+  const type = document.getElementById('owner-option-type').value;
+  const value = document.getElementById('owner-option-value').value.trim();
+  const messageDiv = document.getElementById('owner-add-option-message');
+
+  if (!value) {
+    messageDiv.innerHTML = '<div class="error">Please enter a value</div>';
+    return;
+  }
+
+  const state = loadState();
+
+  const option = {
+    id: `${type[0]}${Date.now()}`,
+    label: value
+  };
+
+  if (type === 'time') {
+    state.options.times.push(option);
+  } else {
+    state.options.locations.push(option);
+  }
+
+  saveState(state);
+
+  messageDiv.innerHTML = '<div class="confirmation">Option added!</div>';
+  e.target.reset();
+
+  setTimeout(() => {
+    messageDiv.innerHTML = '';
+    render();
+  }, 1500);
 }
 
 function handleAddOption(e) {
